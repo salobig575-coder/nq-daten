@@ -23,13 +23,19 @@ from datetime import datetime, timezone
 SYMBOLS = {"nq": "NQ=F", "es": "ES=F"}
 
 # (Dateisuffix, Yahoo-Interval, Yahoo-Range)
+# 5m und 15m dienen als Conditions, 30m/1h als Ausfuehrungs- und HTF-Frames.
 SERIES = [
+    ("5m", "5m", "30d"),
+    ("15m", "15m", "60d"),
     ("30m", "30m", "60d"),
     ("1h", "1h", "60d"),
     ("1d", "1d", "6mo"),
 ]
 
-BASE = "https://query1.finance.yahoo.com/v8/finance/chart/"
+HOSTS = [
+    "https://query1.finance.yahoo.com/v8/finance/chart/",
+    "https://query2.finance.yahoo.com/v8/finance/chart/",
+]
 UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/125.0 Safari/537.36"
@@ -37,22 +43,36 @@ UA = (
 OUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 
 
-def fetch_json(url, tries=4):
-    """Holt eine URL mit Retry und exponentiellem Backoff."""
+def fetch_json(pfad, tries=3):
+    """
+    Holt die Chart-Daten. Probiert beide Yahoo-Hosts durch, mit Backoff.
+    Yahoo drosselt GitHub-Runner gelegentlich mit 429 - dann laenger warten.
+    """
     last = None
     for attempt in range(tries):
-        try:
-            req = urllib.request.Request(
-                url, headers={"User-Agent": UA, "Accept": "application/json"}
-            )
-            ctx = ssl.create_default_context()
-            with urllib.request.urlopen(req, timeout=45, context=ctx) as resp:
-                return json.loads(resp.read().decode("utf-8"))
-        except Exception as exc:  # noqa: BLE001
-            last = exc
-            if attempt < tries - 1:
-                time.sleep(3 * (attempt + 1))
-    raise RuntimeError(f"Abruf fehlgeschlagen: {url} -> {last}")
+        for base in HOSTS:
+            url = base + pfad
+            try:
+                req = urllib.request.Request(
+                    url,
+                    headers={
+                        "User-Agent": UA,
+                        "Accept": "application/json",
+                        "Accept-Language": "en-US,en;q=0.9",
+                    },
+                )
+                ctx = ssl.create_default_context()
+                with urllib.request.urlopen(req, timeout=45, context=ctx) as resp:
+                    return json.loads(resp.read().decode("utf-8"))
+            except urllib.error.HTTPError as exc:
+                last = f"HTTP {exc.code}"
+                if exc.code in (429, 503):
+                    time.sleep(20 * (attempt + 1))  # gedrosselt, laenger warten
+            except Exception as exc:  # noqa: BLE001
+                last = f"{type(exc).__name__}: {exc}"
+        if attempt < tries - 1:
+            time.sleep(8 * (attempt + 1))
+    raise RuntimeError(f"Abruf fehlgeschlagen ({pfad}) -> {last}")
 
 
 def to_rows(payload):
@@ -91,9 +111,9 @@ def main():
     for name, symbol in SYMBOLS.items():
         for suffix, interval, rng in SERIES:
             key = f"{name}_{suffix}"
-            url = f"{BASE}{urllib.parse.quote(symbol)}?interval={interval}&range={rng}"
+            pfad = f"{urllib.parse.quote(symbol)}?interval={interval}&range={rng}"
             try:
-                rows, ymeta = to_rows(fetch_json(url))
+                rows, ymeta = to_rows(fetch_json(pfad))
                 if not rows:
                     raise RuntimeError("keine Bars zurueckgekommen")
                 path = os.path.join(OUT_DIR, f"{key}.csv")
@@ -119,8 +139,15 @@ def main():
     with open(os.path.join(OUT_DIR, "meta.json"), "w", encoding="utf-8") as fh:
         json.dump(meta_out, fh, indent=2, ensure_ascii=False)
 
+    gesamt = len(SYMBOLS) * len(SERIES)
+    print(f"\n{gesamt - failures} von {gesamt} Reihen geholt.")
     # Nur hart fehlschlagen, wenn gar nichts geklappt hat.
-    if failures == len(SYMBOLS) * len(SERIES):
+    if failures == gesamt:
+        print(
+            "Kein einziger Abruf hat geklappt. Meist drosselt Yahoo die "
+            "GitHub-Runner kurzzeitig - in ein paar Minuten nochmal laufen lassen.",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
 
