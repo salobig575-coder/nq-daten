@@ -1,0 +1,43 @@
+name: Kursdaten holen
+
+on:
+  schedule:
+    # Alle 20 Minuten zwischen 11:00 und 15:00 UTC, Mo-Fr.
+    # Deckt 13:00-17:00 Wiener Sommerzeit und 12:00-16:00 Winterzeit ab,
+    # also in beiden Faellen den Lauf um 14:45 Wien.
+    - cron: "*/20 11-15 * * 1-5"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: kursdaten
+  cancel-in-progress: false
+
+jobs:
+  holen:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Repo auschecken
+        uses: actions/checkout@v4
+
+      - name: Python einrichten
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Daten abrufen
+        run: python fetch_data.py
+
+      - name: Ergebnis committen
+        run: |
+          git config user.name "kursdaten-bot"
+          git config user.email "actions@github.com"
+          git add data/
+          if git diff --staged --quiet; then
+            echo "Keine Aenderung, nichts zu committen."
+          else
+            git commit -m "Kursdaten $(date -u '+%Y-%m-%d %H:%M UTC')"
+            git push
+          fi
