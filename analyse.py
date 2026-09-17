@@ -597,38 +597,66 @@ def po3(nq):
     }
 
 
-def main():
+STEMPEL = "%Y-%m-%d %H:%M:%S"
+# nq/es tragen den Daily Bias. xau/btc laufen nur mit und landen in einer
+# eigenen Datei, damit levels.json schlank und eindeutig bleibt.
+BIAS = ("nq", "es")
+EXTRA = ("xau", "btc")
+
+
+def berechne(namen):
     out = {
-        "berechnet_utc": datetime.now(tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
+        "berechnet_utc": datetime.now(tz=timezone.utc).strftime(STEMPEL),
         "hinweis": "Sessions nach CME-Zeit, Handelstag 18:00 ET bis 17:00 ET.",
     }
-    for name in ("nq", "es"):
+    for name in namen:
         try:
             out[name] = auswerten(name)
         except Exception as exc:  # noqa: BLE001
             out[name] = {"fehler": f"{type(exc).__name__}: {exc}"[:300]}
+    return out
 
-    if "fehler" not in out.get("nq", {}) and "fehler" not in out.get("es", {}):
-        out["nq_vs_es"] = smt_vergleich(out["nq"], out["es"])
-        out["daily_profile"] = daily_profile(out["nq"])
-        out["po3_heute"] = po3(out["nq"])
 
+def zeile(name, d):
+    if "fehler" in d:
+        return f"{name.upper():4s} FEHLER {d['fehler']}"
+    k = d["key_levels"]
+    return (
+        f"{name.upper():4s} Preis {d['preis']}  PDH {k['pdh']}  PDL {k['pdl']}  "
+        f"PWH {k['pwh']}  PWL {k['pwl']}  Trend4h {d['trend_4h']['richtung']}"
+    )
+
+
+def main():
+    # --- Daily Bias: NQ und ES ---
+    bias = berechne(BIAS)
+    if all("fehler" not in bias.get(n, {"fehler": 1}) for n in BIAS):
+        bias["nq_vs_es"] = smt_vergleich(bias["nq"], bias["es"])
+        bias["daily_profile"] = daily_profile(bias["nq"])
+        bias["po3_heute"] = po3(bias["nq"])
     with open(os.path.join(DATA, "levels.json"), "w", encoding="utf-8") as fh:
-        json.dump(out, fh, indent=1, ensure_ascii=False)
+        json.dump(bias, fh, indent=1, ensure_ascii=False)
 
-    for name in ("nq", "es"):
-        d = out.get(name, {})
-        if "fehler" in d:
-            print(f"{name.upper()}: FEHLER {d['fehler']}")
-        else:
-            k = d["key_levels"]
-            print(
-                f"{name.upper()}  Preis {d['preis']}  PDH {k['pdh']}  PDL {k['pdl']}  "
-                f"PWH {k['pwh']}  PWL {k['pwl']}  Trend4h {d['trend_4h']['richtung']}"
-            )
-    if "nq_vs_es" in out:
-        print("SMT:", out["nq_vs_es"]["smt"] or "keins")
-        print("TM :", out["nq_vs_es"]["true_manipulation"] or "keine")
+    # --- Nur mitlaufend: Gold und Bitcoin ---
+    extra = berechne(EXTRA)
+    extra["hinweis"] = (
+        "XAUUSD und BTCUSD. Laufen nur mit, gehen NICHT in den Daily Bias und "
+        "NICHT per Mail raus - nur auf Nachfrage verwenden. Sessionschnitt ist "
+        "derselbe wie bei den Futures (18:00 ET); BTC handelt auch am Wochenende, "
+        "diese Bars fallen damit in den Montag."
+    )
+    with open(os.path.join(DATA, "levels_extra.json"), "w", encoding="utf-8") as fh:
+        json.dump(extra, fh, indent=1, ensure_ascii=False)
+
+    print("--- Daily Bias (levels.json) ---")
+    for n in BIAS:
+        print(" ", zeile(n, bias.get(n, {})))
+    if "nq_vs_es" in bias:
+        print("  SMT:", [x["level"] for x in bias["nq_vs_es"]["smt"]] or "keins")
+        print("  TM :", [x["level"] for x in bias["nq_vs_es"]["true_manipulation"]] or "keine")
+    print("--- Nur mitlaufend (levels_extra.json) ---")
+    for n in EXTRA:
+        print(" ", zeile(n, extra.get(n, {})))
 
 
 if __name__ == "__main__":
