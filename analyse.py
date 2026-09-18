@@ -68,6 +68,54 @@ def vielleicht_laden(name, suffix):
         return []
 
 
+# Serien, die auswerten() tatsaechlich einliest (1h/1d werden von fetch_data.py
+# zwar geholt, aber hier nie gelesen - 1h/4h werden aus 30m resampled).
+GENUTZTE_SUFFIXE = ("5m", "15m", "30m")
+
+
+def lade_fetch_meta():
+    """
+    Liest meta.json von fetch_data.py: Status des letzten Datenabrufs pro
+    Serie. Ohne diesen Check faellt ein einzelner fehlgeschlagener Abruf
+    (z.B. nur nq_30m) nirgends auf - fetch_data.py laesst dann einfach die
+    alte CSV liegen und beendet sich trotzdem mit Exit-Code 0 (haerter
+    Fehlschlag nur wenn ALLE Serien fehlschlagen), und berechnet_utc in
+    levels.json zeigt unabhaengig davon immer die aktuelle Laufzeit von
+    analyse.py - nicht, ob die Inputs tatsaechlich frisch sind.
+    """
+    pfad = os.path.join(DATA, "meta.json")
+    try:
+        with open(pfad, encoding="utf-8") as fh:
+            return json.load(fh)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return None
+
+
+def fetch_warnung_fuer(meta, name):
+    """Welche der tatsaechlich genutzten Serien (5m/15m/30m) sind beim
+    letzten fetch_data.py-Lauf fehlgeschlagen und liegen deshalb noch mit
+    alten Bars vor?"""
+    if not meta:
+        return None
+    reihen = meta.get("reihen", {})
+    fehler = []
+    for suffix in GENUTZTE_SUFFIXE:
+        eintrag = reihen.get(f"{name}_{suffix}")
+        if eintrag and eintrag.get("status") != "ok":
+            fehler.append(f"{name}_{suffix}: {eintrag.get('meldung', 'unbekannter Fehler')}")
+    if not fehler:
+        return None
+    return {
+        "fehlgeschlagene_serien": fehler,
+        "letzter_abrufversuch_utc": meta.get("generiert_utc"),
+        "hinweis": (
+            "Diese Serie(n) sind beim letzten Datenabruf fehlgeschlagen und "
+            "liegen deshalb noch mit alten Bars vor - die Analyse oben nutzt "
+            "diese veralteten Daten, ohne dass es sonst sichtbar waere."
+        ),
+    }
+
+
 # ============================================================ Sessions
 
 def handelstag(bar):
@@ -566,7 +614,17 @@ def aktuelle_range(bars):
 # ============================================================ Gaps / VWAP
 
 def opening_gaps(bars):
-    """NWOG (Fr-Close -> So-Open) und NDOG (Tagesluecken), Tag 20."""
+    """
+    NWOG (Fr-Close -> So-Open) und NDOG (Tagesluecken), Tag 20.
+
+    "gefuellt" (Tag 20: "werden im Grossteil der Faelle immer komplett
+    gefuellt") prueft KUMULATIV ueber alle Bars seit der Gap-Entstehung bis
+    zum aktuellen Datenrand - nicht nur eine einzelne Kerze und nicht nur
+    den ersten Tag danach. Eine Gap wird ueblicherweise ueber mehrere Kerzen
+    und teils mehrere Tage hinweg graduell zugelaufen: der tiefste Punkt und
+    der hoechste Punkt der Gap-Range muessen nicht in derselben Kerze
+    angefasst werden, damit die Gap als voll geschlossen gilt.
+    """
     nwog, ndog = None, []
     tage = zu_tagen(bars)
     sortiert = sorted(tage.keys())
@@ -576,12 +634,12 @@ def opening_gaps(bars):
         open_ = jetzt[0]["o"]
         if abs(open_ - close) < 1e-9:
             continue
+        lo, hi = min(close, open_), max(close, open_)
+        seither = [b for t in sortiert[idx:] for b in tage[t]]
         eintrag = {
-            "von": round(min(close, open_), 2),
-            "bis": round(max(close, open_), 2),
-            "gefuellt": any(
-                x["l"] <= min(close, open_) and x["h"] >= max(close, open_) for x in jetzt
-            ),
+            "von": round(lo, 2),
+            "bis": round(hi, 2),
+            "gefuellt": any(x["l"] <= lo for x in seither) and any(x["h"] >= hi for x in seither),
             "datum": sortiert[idx].isoformat(),
         }
         # Wochenende: der Vortag war Freitag
@@ -849,6 +907,7 @@ EXTRA = ("xau", "btc")
 
 
 def berechne(namen):
+    meta = lade_fetch_meta()
     out = {
         "berechnet_utc": datetime.now(tz=timezone.utc).strftime(STEMPEL),
         "hinweis": "Sessions nach CME-Zeit, Handelstag 18:00 ET bis 17:00 ET.",
@@ -856,6 +915,10 @@ def berechne(namen):
     for name in namen:
         try:
             out[name] = auswerten(name)
+            if "fehler" not in out[name]:
+                warnung = fetch_warnung_fuer(meta, name)
+                if warnung:
+                    out[name]["fetch_warnung"] = warnung
         except Exception as exc:  # noqa: BLE001
             out[name] = {"fehler": f"{type(exc).__name__}: {exc}"[:300]}
     return out
