@@ -14,12 +14,13 @@ jobs:
       - name: Repo auschecken
         uses: actions/checkout@v4
 
-      - name: Alter der Daten prüfen
+      - name: Alter und Qualität der Daten prüfen
         id: check
         run: |
           python3 - <<'EOF' >> "$GITHUB_OUTPUT"
           import json, datetime
 
+          # --- 1) Ist levels.json ueberhaupt frisch berechnet worden? ---
           try:
               with open("data/levels.json") as f:
                   data = json.load(f)
@@ -32,8 +33,28 @@ jobs:
               else:
                   print("stale=false")
           except Exception as e:
+              data = None
               print("stale=true")
               print(f"grund=levels.json konnte nicht gelesen werden: {e}")
+
+          # --- 2) Selbst wenn frisch berechnet: hat fetch_data.py fuer NQ/ES
+          #        trotzdem eine Serie NICHT aktualisieren koennen? Das faellt
+          #        an berechnet_utc allein nie auf, weil analyse.py auch mit
+          #        alten Bars "erfolgreich" durchlaeuft. ---
+          qualitaet_probleme = []
+          if data:
+              for symbol in ("nq", "es"):
+                  eintrag = data.get(symbol) or {}
+                  warnung = eintrag.get("fetch_warnung")
+                  if warnung:
+                      serien = ", ".join(warnung.get("fehlgeschlagene_serien", []))
+                      qualitaet_probleme.append(f"{symbol}: {serien}")
+          if qualitaet_probleme:
+              print("qualitaet=true")
+              grund2 = "Datenabruf teilweise fehlgeschlagen, alte Bars in Benutzung -> " + " | ".join(qualitaet_probleme)
+              print(f"qualitaet_grund={grund2}")
+          else:
+              print("qualitaet=false")
           EOF
 
       - name: Issue öffnen bei Stillstand
@@ -68,6 +89,45 @@ jobs:
                 owner: context.repo.owner, repo: context.repo.repo,
                 issue_number: issue.number,
                 body: "Daten sind wieder aktuell — Issue wird automatisch geschlossen."
+              });
+              await github.rest.issues.update({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: issue.number, state: "closed"
+              });
+            }
+
+      - name: Issue öffnen bei teilweisem Datenausfall (NQ/ES veraltet)
+        if: steps.check.outputs.qualitaet == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const grund = `${{ steps.check.outputs.qualitaet_grund }}`;
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner, repo: context.repo.repo,
+              state: "open", labels: "datenqualitaet"
+            });
+            if (issues.length === 0) {
+              await github.rest.issues.create({
+                owner: context.repo.owner, repo: context.repo.repo,
+                title: "⚠️ nq-daten: NQ/ES laufen mit veralteten Bars",
+                body: grund, labels: ["datenqualitaet"]
+              });
+            }
+
+      - name: Issue schließen wenn Datenqualität wieder ok
+        if: steps.check.outputs.qualitaet == 'false'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner, repo: context.repo.repo,
+              state: "open", labels: "datenqualitaet"
+            });
+            for (const issue of issues) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: issue.number,
+                body: "NQ/ES laufen wieder mit frischen Daten — Issue wird automatisch geschlossen."
               });
               await github.rest.issues.update({
                 owner: context.repo.owner, repo: context.repo.repo,
