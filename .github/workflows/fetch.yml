@@ -2,10 +2,9 @@ name: Kursdaten holen
 
 on:
   schedule:
-    # Alle 20 Minuten zwischen 11:00 und 15:00 UTC, Mo-Fr.
-    # Deckt 13:00-17:00 Wiener Sommerzeit und 12:00-16:00 Winterzeit ab,
-    # also in beiden Faellen den Lauf um 14:45 Wien.
-    - cron: "3,23,43 * * * *"
+    # 11:00-15:00 UTC deckt den Daily-Bias-Lauf um 14:45 Wien ab (Sommer+Winter).
+    # 20:00-22:00 UTC deckt die Bias-Review um 22:30 Wien ab (Sommer+Winter).
+    - cron: "3,23,43 11-15,20-22 * * 1-5"
   workflow_dispatch: {}
 
 permissions:
