@@ -1,0 +1,78 @@
+name: Datenfrische prüfen
+
+on:
+  schedule:
+    - cron: "13,33,53 11-15,20-22 * * 1-5"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  frische-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Repo auschecken
+        uses: actions/checkout@v4
+
+      - name: Alter der Daten prüfen
+        id: check
+        run: |
+          python3 - <<'EOF' >> "$GITHUB_OUTPUT"
+          import json, datetime
+
+          try:
+              with open("data/levels.json") as f:
+                  data = json.load(f)
+              berechnet = datetime.datetime.strptime(data["berechnet_utc"], "%Y-%m-%d %H:%M:%S")
+              berechnet = berechnet.replace(tzinfo=datetime.timezone.utc)
+              alter_min = (datetime.datetime.now(datetime.timezone.utc) - berechnet).total_seconds() / 60
+              if alter_min > 30:
+                  print("stale=true")
+                  print(f"grund=levels.json ist {alter_min:.0f} Minuten alt (berechnet_utc: {data['berechnet_utc']} UTC)")
+              else:
+                  print("stale=false")
+          except Exception as e:
+              print("stale=true")
+              print(f"grund=levels.json konnte nicht gelesen werden: {e}")
+          EOF
+
+      - name: Issue öffnen bei Stillstand
+        if: steps.check.outputs.stale == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const grund = `${{ steps.check.outputs.grund }}`;
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner, repo: context.repo.repo,
+              state: "open", labels: "datenausfall"
+            });
+            if (issues.length === 0) {
+              await github.rest.issues.create({
+                owner: context.repo.owner, repo: context.repo.repo,
+                title: "⚠️ nq-daten: Datenabruf steht still",
+                body: grund, labels: ["datenausfall"]
+              });
+            }
+
+      - name: Issue schließen wenn wieder frisch
+        if: steps.check.outputs.stale == 'false'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner, repo: context.repo.repo,
+              state: "open", labels: "datenausfall"
+            });
+            for (const issue of issues) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: issue.number,
+                body: "Daten sind wieder aktuell — Issue wird automatisch geschlossen."
+              });
+              await github.rest.issues.update({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: issue.number, state: "closed"
+              });
+            }
