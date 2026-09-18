@@ -288,7 +288,7 @@ def intermediate_levels(bars, tf_name, max_out=3):
             # "reacted or delivered out of" -> nach dem Tap muss mindestens
             # die Haelfte des Legs wieder abgegeben werden
             reagiert = min(b["l"] for b in nach) <= hoch - 0.5 * (hoch - level)
-            gesweept = any(b["l"] < level for b in nach)
+            bruch = bruch_pruefen(nach, level, "unter")
             art = "ITL"
         else:
             start = max(zwischen, key=lambda b: b["h"])
@@ -297,21 +297,26 @@ def intermediate_levels(bars, tf_name, max_out=3):
             if level <= tief:
                 continue
             reagiert = max(b["h"] for b in nach) >= tief + 0.5 * (level - tief)
-            gesweept = any(b["h"] > level for b in nach)
+            bruch = bruch_pruefen(nach, level, "ueber")
             art = "ITH"
 
         if not reagiert:
             continue
 
-        raus.append(
-            {
-                "art": f"{tf_name} {art}",
-                "preis": round(level, 2),
-                "aus_fvg": [round(unten, 2), round(oben, 2)],
-                "et": start["et"].strftime("%m-%d %H:%M"),
-                "gesweept": gesweept,
-            }
-        )
+        # status: "unberuehrt" (noch offen), "sweep" (nur Wick durchs Level,
+        # Ablehnung) oder "body_close" (Kerze mit Body Close durchgebrochen,
+        # Akzeptanz) - dieselbe Drei-Wege-Unterscheidung wie bei level_status,
+        # damit ein reiner Sweep nicht mit einem echten Bruch verwechselt wird.
+        eintrag = {
+            "art": f"{tf_name} {art}",
+            "preis": round(level, 2),
+            "aus_fvg": [round(unten, 2), round(oben, 2)],
+            "et": start["et"].strftime("%m-%d %H:%M"),
+            "status": bruch["status"],
+        }
+        if "zeit_et" in bruch:
+            eintrag["bruch_zeit_et"] = bruch["zeit_et"]
+        raus.append(eintrag)
 
     # Dasselbe Low/High kann aus mehreren FVGs heraus qualifizieren - das ist
     # ein Level, kein zweites. Pro Preis nur einmal.
