@@ -1,7 +1,20 @@
 name: Kursdaten holen
 
 on:
+  # Primaerer Ausloeser bleibt das Google Apps Script ("NQ-daten-trigger"),
+  # das die GitHub-API exakt zur Zielzeit aufruft. GitHub-eigene schedule-Crons
+  # koennen laut GitHub-Doku bei hoher Last verzoegert werden - deshalb war der
+  # Cron hier vorher komplett raus.
   workflow_dispatch: {}
+
+  # Zusaetzliche, unabhaengige Reservespur fuer die Frueh-Uebersicht
+  # (XAU/BTC, Mail um 7:40 Wien = 5:40 UTC). Das Apps Script feuert nur in den
+  # Fenstern 11-15 und 20-22 UTC, Mo-Fr - ohne diese Spur waeren die Daten um
+  # 5:40 UTC rund sieben Stunden alt, und am Wochenende fuer BTC noch aelter.
+  # Stuendlich, alle sieben Tage: selbst wenn GitHub einen Lauf um 20-30 Minuten
+  # verzoegert, bleiben die Daten damit innerhalb des 1-2-Stunden-Fensters.
+  schedule:
+    - cron: "0 * * * *"
 
 permissions:
   contents: write
