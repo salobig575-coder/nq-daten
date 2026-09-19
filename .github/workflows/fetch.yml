@@ -41,6 +41,28 @@ jobs:
       - name: Levels berechnen
         run: python analyse.py
 
+      # Rechnet jeden Wert aus levels.json unabhaengig aus den Roh-Bars nach
+      # und schreibt das Ergebnis nach data/pruefung.json. Der Schritt darf
+      # den Workflow NICHT abbrechen: pruefung.json soll auch dann mit
+      # committet werden, wenn sie Fehler meldet - nur so sieht der Daily Bias
+      # ueberhaupt, dass etwas nicht stimmt. Der Bias entscheidet dann anhand
+      # der Datei, was er sagen darf und was nicht.
+      - name: Levels gegenpruefen
+        id: pruefung
+        continue-on-error: true
+        run: python pruefe.py
+
+      - name: Ergebnis der Pruefung anzeigen
+        if: always()
+        run: |
+          if [ "${{ steps.pruefung.outcome }}" = "failure" ]; then
+            echo "::warning::Die Gegenpruefung hat Abweichungen gefunden. "\
+              "Details in data/pruefung.json - betroffene Konzepte gehoeren "\
+              "nicht ungeprueft in den Daily Bias."
+          else
+            echo "Gegenpruefung bestanden."
+          fi
+
       - name: Ergebnis committen
         run: |
           git config user.name "kursdaten-bot"
