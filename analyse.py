@@ -443,9 +443,20 @@ def rejection_blocks(bars, key_levels, max_out=6):
     RB nach Tag 12: starke Reaction aus einem HTF Key Level, bestaetigt durch
     Body Close in die Gegenrichtung. Der RB ist der Wick. Darf sich ueber
     zwei Kerzen erstrecken.
+
+    Erkennung als echte Ablehnung am Level (Tag 3: "Wick = Ablehnung, Close =
+    Akzeptanz"): der Wick muss das Level erreichen oder ueberschiessen, der
+    Body muss diesseits bleiben. KEINE Naehe-Toleranz mehr - die fruehere
+    Version verlangte, dass der Wick innerhalb von 0,06 % am Level endet, und
+    hat damit genau die klassischen Faelle uebersehen, in denen der Sweep
+    deutlich ueber das Level hinausschiesst und erst dann rejected. Wie weit
+    der Wick hinausschiesst, spielt laut Bootcamp keine Rolle.
+
+    Einzige Operationalisierung ohne woertliche Bootcamp-Vorgabe: "starke
+    Reaction" wird als Wick > 50 % der Kerzenspanne gelesen.
     """
     raus = []
-    werte = [v for v in key_levels.values() if v]
+    werte = [(k, v) for k, v in key_levels.items() if v]
     for i in range(1, len(bars) - 1):
         b, nxt = bars[i], bars[i + 1]
         koerper_hoch = max(b["o"], b["c"])
@@ -454,14 +465,16 @@ def rejection_blocks(bars, key_levels, max_out=6):
         unterer_wick = koerper_tief - b["l"]
         spanne = max(b["h"] - b["l"], 1e-9)
 
-        nahe_oben = any(abs(b["h"] - lv) / lv < EQ_TOLERANZ for lv in werte)
-        nahe_unten = any(abs(b["l"] - lv) / lv < EQ_TOLERANZ for lv in werte)
+        # Wick jenseits des Levels, Body diesseits -> Ablehnung am Level
+        oben_lv = next((k for k, lv in werte if b["h"] >= lv > koerper_hoch), None)
+        unten_lv = next((k for k, lv in werte if b["l"] <= lv < koerper_tief), None)
 
         # Bearischer RB: langer oberer Wick am Level + bearisher Close
-        if nahe_oben and oberer_wick / spanne > 0.5 and (b["c"] < b["o"] or nxt["c"] < nxt["o"]):
+        if oben_lv and oberer_wick / spanne > 0.5 and (b["c"] < b["o"] or nxt["c"] < nxt["o"]):
             raus.append(
                 {
                     "richtung": "bearish",
+                    "level": oben_lv,
                     "von": round(koerper_hoch, 2),
                     "bis": round(b["h"], 2),
                     "mitte": round((koerper_hoch + b["h"]) / 2, 2),
@@ -469,10 +482,11 @@ def rejection_blocks(bars, key_levels, max_out=6):
                 }
             )
         # Bullischer RB: langer unterer Wick am Level + bullisher Close
-        if nahe_unten and unterer_wick / spanne > 0.5 and (b["c"] > b["o"] or nxt["c"] > nxt["o"]):
+        if unten_lv and unterer_wick / spanne > 0.5 and (b["c"] > b["o"] or nxt["c"] > nxt["o"]):
             raus.append(
                 {
                     "richtung": "bullish",
+                    "level": unten_lv,
                     "von": round(b["l"], 2),
                     "bis": round(koerper_tief, 2),
                     "mitte": round((b["l"] + koerper_tief) / 2, 2),
@@ -484,22 +498,31 @@ def rejection_blocks(bars, key_levels, max_out=6):
 
 def devil_marks(bars, max_out=5):
     """
-    Kerze ohne Wick auf einer Seite (Tag 20). Winzige Wicks zaehlen trotzdem
-    noch als "kein Wick" (Tag 20: "~0,5 Punkte zaehlen trotzdem") - Schwelle
-    ist Prozent der Range ODER ein kleiner Anteil vom Preis, damit es sowohl
-    auf NQ- als auch auf ES-Preisniveau passt.
+    Kerze ohne Wick auf einer Seite (Tag 20). Toleranz ist im Bootcamp
+    ABSOLUT formuliert ("auch ein winziger Wick von ~0,5 Punkten zaehlt noch
+    als wicklos"), nicht relativ zur Kerzenspanne. Die fruehere Version liess
+    zusaetzlich alles unter 2 % der Spanne durchgehen - auf einer 300-Punkte-
+    30m-Kerze waeren das 6 Punkte Wick gewesen, die dann faelschlich als
+    Devil Mark gezaehlt haetten. Deshalb jetzt nur noch die absolute
+    Schwelle, am Preisniveau skaliert, damit sie auf NQ, ES, XAU und BTC
+    gleichermassen ~0,5 NQ-Punkten entspricht.
+
+    Beide Seiten werden geprueft: eine Kerze kann oben UND unten wicklos sein.
     """
     raus = []
-    for b in bars:
-        spanne = max(b["h"] - b["l"], 1e-9)
+    # Die letzte Bar ist am Datenrand fast immer noch offen. Eine laufende
+    # Kerze hat naturgemaess kaum Wicks und wuerde sonst jedes Mal als Devil
+    # Mark durchgehen - nach Tag 3 existiert die Information vor dem Close
+    # schlicht noch nicht. Gleiches gilt fuer Bars ganz ohne Spanne.
+    for b in bars[:-1]:
+        if b["h"] - b["l"] <= 0:
+            continue
         wick_oben = b["h"] - max(b["o"], b["c"])
         wick_unten = min(b["o"], b["c"]) - b["l"]
-        floor = b["c"] * 0.000017  # ~0.5 Punkte bei einem NQ-Preis um 29000
-        oben_winzig = wick_oben / spanne < 0.02 or wick_oben <= floor
-        unten_winzig = wick_unten / spanne < 0.02 or wick_unten <= floor
-        if oben_winzig:
+        floor = b["c"] * 0.000017  # ~0,5 Punkte bei einem NQ-Preis um 29000
+        if wick_oben <= floor:
             raus.append({"seite": "oben", "preis": round(b["h"], 2), "et": b["et"].strftime("%m-%d %H:%M")})
-        elif unten_winzig:
+        if wick_unten <= floor:
             raus.append({"seite": "unten", "preis": round(b["l"], 2), "et": b["et"].strftime("%m-%d %H:%M")})
     return raus[-max_out:]
 
@@ -807,7 +830,7 @@ def auswerten(name):
 
 # ============================================================ NQ vs ES
 
-def smt_vergleich(nq, es):
+def smt_vergleich(nq, es, a_name="nq", b_name="es"):
     """
     SMT (Tag 13): reine Liquiditaets-Sweep-Divergenz - eine Seite sweept ein
     Level (nur Wick), die andere beruehrt es ueberhaupt nicht. Ein
@@ -831,48 +854,78 @@ def smt_vergleich(nq, es):
         sa, sb = a["status"], b["status"]
         if (sa == "sweep") != (sb == "sweep") and "unberuehrt" in (sa, sb):
             raus["smt"].append(
-                {"level": k, "nq": sa, "es": sb, "voraus": "NQ" if sa == "sweep" else "ES"}
+                {
+                    "level": k,
+                    a_name: sa,
+                    b_name: sb,
+                    "voraus": a_name.upper() if sa == "sweep" else b_name.upper(),
+                }
             )
         elif sa != "unberuehrt" and sb != "unberuehrt" and (sa == "body_close" or sb == "body_close"):
             # Mindestens eine Seite mit Body Close durch -> struktureller Bruch, keine Manipulation
-            raus["beide_gebrochen"].append({"level": k, "nq": sa, "es": sb})
+            raus["beide_gebrochen"].append({"level": k, a_name: sa, b_name: sb})
 
-    nq_sweeps = [k for k, v in nq_status.items() if v["status"] == "sweep"]
-    es_sweeps = [k for k, v in es_status.items() if v["status"] == "sweep"]
-    if nq_sweeps and es_sweeps:
+    a_sweeps = [k for k, v in nq_status.items() if v["status"] == "sweep"]
+    b_sweeps = [k for k, v in es_status.items() if v["status"] == "sweep"]
+    if a_sweeps and b_sweeps:
         raus["true_manipulation"].append(
             {
-                "nq_levels": nq_sweeps,
-                "es_levels": es_sweeps,
+                f"{a_name}_levels": a_sweeps,
+                f"{b_name}_levels": b_sweeps,
                 # Gleiches Level auf beiden Seiten = klassischster TM-Fall
-                "gleiche_levels": sorted(set(nq_sweeps) & set(es_sweeps)),
+                "gleiche_levels": sorted(set(a_sweeps) & set(b_sweeps)),
             }
         )
 
     return raus
 
 
-def daily_profile(nq):
-    """Welches der drei Daily Profiles zeichnet sich ab (Tag 19)?"""
-    s = nq.get("sessions_heute", {})
+def daily_profile(d):
+    """
+    Welches der drei Daily Profiles zeichnet sich ab (Tag 19)?
+
+    Unterschieden wird genau nach den Bootcamp-Kriterien, nicht nach
+    Spannen-Verhaeltnissen (die fruehere Version verglich London- gegen
+    Asia-Spanne mit einem frei gewaehlten Faktor 0,8 - das steht so nirgends
+    im Bootcamp und konnte 2 und 3 grundsaetzlich nicht trennen):
+
+      Accumulation heisst laut Tag 19 "Seitwaertsbewegung, KEINE Liquidity
+      wird genommen". Manipulation heisst "Bewegung in ein
+      High-Timeframe-Key-Level bzw. Liquidity Sweep".
+
+      1: London/Asia Accumulation  -> London nimmt weder Asia-Liquiditaet
+         noch tappt es ein HTF Key Level.
+      2: London Reversal + NY Cont -> London hat ein HTF Key Level (PDH/PDL/
+         PWH/PWL) getappt, also echt manipuliert.
+      3: London Judas + NY Reversal-> London bewegt sich (nimmt Asia raus),
+         OHNE ein HTF Key Level zu tappen -> Judas Swing (Tag 19).
+
+    Der Unterschied zwischen 2 und 3 ist damit genau der, den das Bootcamp
+    nennt: hat London ein HTF Key Level getappt oder nicht.
+    """
+    s = d.get("sessions_heute", {})
     asia, london, ny = s.get("asia"), s.get("london"), s.get("ny_am")
     if not (asia and london):
         return {"profil": "noch nicht bestimmbar"}
-    asia_spanne = asia["high"] - asia["low"]
-    london_spanne = london["high"] - london["low"]
-    london_sweep = london["high"] > asia["high"] or london["low"] < asia["low"]
 
-    if london_spanne < asia_spanne * 0.8 and not london_sweep:
+    k = d.get("key_levels", {})
+    htf = {n: v for n, v in k.items() if n in ("pdh", "pdl", "pwh", "pwl") and v}
+    getappt = [n for n, v in htf.items() if london["low"] <= v <= london["high"]]
+    london_sweep_asia = london["high"] > asia["high"] or london["low"] < asia["low"]
+
+    if not london_sweep_asia and not getappt:
         p = "1: London/Asia Accumulation -> NY Manipulation & Distribution"
-    elif london_sweep and london_spanne > asia_spanne:
-        p = "2 oder 3: London hat manipuliert - Reversal+NY Continuation, oder Judas+NY Reversal"
+    elif getappt:
+        p = "2: London Reversal + NY Continuation (London hat ein HTF Key Level getappt)"
     else:
-        p = "unklar"
+        p = "3: London Judas + NY Reversal (Bewegung ohne HTF-Key-Level-Tap)"
+
     return {
         "profil": p,
-        "london_hat_asia_gesweept": london_sweep,
-        "asia_spanne": round(asia_spanne, 2),
-        "london_spanne": round(london_spanne, 2),
+        "london_hat_asia_gesweept": london_sweep_asia,
+        "london_hat_htf_key_level_getappt": getappt,
+        "asia_spanne": round(asia["high"] - asia["low"], 2),
+        "london_spanne": round(london["high"] - london["low"], 2),
         "ny_am_bisher": ny,
     }
 
@@ -900,10 +953,12 @@ def po3(nq):
 
 
 STEMPEL = "%Y-%m-%d %H:%M:%S"
-# nq/es tragen den Daily Bias. xau/btc laufen nur mit und landen in einer
-# eigenen Datei, damit levels.json schlank und eindeutig bleibt.
+# nq/es tragen den NY-AM Daily Bias (levels.json).
+# xau/xag/btc tragen die Frueh-Uebersicht (levels_extra.json): XAU mit XAG als
+# korrelierendem Pair fuer SMT/True Manipulation (Tag 13/24), BTC ohne Pair und
+# damit ausdruecklich ohne SMT-Block.
 BIAS = ("nq", "es")
-EXTRA = ("xau", "btc")
+EXTRA = ("xau", "xag", "btc")
 
 
 def berechne(namen):
@@ -944,13 +999,24 @@ def main():
     with open(os.path.join(DATA, "levels.json"), "w", encoding="utf-8") as fh:
         json.dump(bias, fh, indent=1, ensure_ascii=False)
 
-    # --- Nur mitlaufend: Gold und Bitcoin ---
+    # --- Frueh-Uebersicht: Gold (mit Silber als Pair) und Bitcoin ---
     extra = berechne(EXTRA)
+    if all("fehler" not in extra.get(n, {"fehler": 1}) for n in ("xau", "xag")):
+        # SMT/True Manipulation nur fuer XAU gegen XAG (Tag 13/24).
+        extra["xau_vs_xag"] = smt_vergleich(extra["xau"], extra["xag"], "xau", "xag")
+    for n in ("xau", "btc"):
+        if "fehler" not in extra.get(n, {"fehler": 1}):
+            extra[f"daily_profile_{n}"] = daily_profile(extra[n])
+            extra[f"po3_heute_{n}"] = po3(extra[n])
     extra["hinweis"] = (
-        "XAUUSD und BTCUSD. Laufen nur mit, gehen NICHT in den Daily Bias und "
-        "NICHT per Mail raus - nur auf Nachfrage verwenden. Sessionschnitt ist "
-        "derselbe wie bei den Futures (18:00 ET); BTC handelt auch am Wochenende, "
-        "diese Bars fallen damit in den Montag."
+        "XAUUSD (Pair: XAGUSD) und BTCUSD fuer die taegliche Frueh-Uebersicht. "
+        "Fuer BTC gibt es bewusst KEIN SMT und keine True Manipulation - es ist "
+        "kein korrelierendes Pair hinterlegt; xau_vs_xag gilt ausschliesslich "
+        "fuer Gold. XAG laeuft nur als Vergleichspaar mit und bekommt keinen "
+        "eigenen Bias. Sessionschnitt ist derselbe wie bei den Futures "
+        "(Handelstag 18:00 ET bis 17:00 ET); BTC handelt durchgehend, Samstag "
+        "und Sonntag sind deshalb eigene Handelstage - PDH/PDL am Montag sind "
+        "bei BTC also Sonntag-High/-Low, nicht Freitag."
     )
     with open(os.path.join(DATA, "levels_extra.json"), "w", encoding="utf-8") as fh:
         json.dump(extra, fh, indent=1, ensure_ascii=False)
@@ -965,9 +1031,11 @@ def main():
             "  TM :",
             f"NQ {tm[0]['nq_levels']} / ES {tm[0]['es_levels']}" if tm else "keine",
         )
-    print("--- Nur mitlaufend (levels_extra.json) ---")
+    print("--- Frueh-Uebersicht (levels_extra.json) ---")
     for n in EXTRA:
         print(" ", zeile(n, extra.get(n, {})))
+    if "xau_vs_xag" in extra:
+        print("  SMT XAU/XAG:", [x["level"] for x in extra["xau_vs_xag"]["smt"]] or "keins")
 
 
 if __name__ == "__main__":
