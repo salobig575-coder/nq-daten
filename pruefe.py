@@ -35,6 +35,22 @@ DATA = os.path.join(HERE, "data")
 # Nachkommastellen in analyse.py), keine inhaltliche Schwelle.
 TOL = 0.011
 
+# Absichtlich hier nochmal definiert statt aus analyse.py importiert: diese
+# Datei soll unabhaengig nachrechnen. Wuerde sie die Konstanten importieren,
+# koennte ein falscher Wert in analyse.py nie auffallen, weil beide Seiten
+# denselben Fehler haetten.
+#
+# Tag 20 / W3: Devil Marks sind nur fuer NQ und ES definiert, Toleranz 0,5
+# Punkte ABSOLUT (im Bootcamp am NQ gesagt).
+DEVIL_MARK_SYMBOLE = ("nq", "es")
+DEVIL_MARK_TOLERANZ = 0.5
+
+# W1: High Timeframe = ab 30 Minuten EINSCHLIESSLICH. Das Bootcamp
+# widerspricht sich (Tag 27/12 "ueber 30", Tag 22 "mindestens 30"); dieses
+# System folgt Tag 22. Diese Felder sind damit die HTF-FVG-Quellen.
+HTF_FVG_FELDER = (("fvg_1d", "1d"), ("fvg_4h", "4h"),
+                  ("fvg_1h", "1h"), ("fvg_30m", "30m"))
+
 
 # ============================================================ Rohdaten
 
@@ -658,7 +674,14 @@ def pruefe_smt(b, d):
     """
     Tag 13: SMT ist eine Sweep-Divergenz - ein Pair sweept (nur Wick), das
     andere fasst das Level nicht an. Ein Body Close ist KEIN SMT.
-    Tag 24: True Manipulation = beide Pairs sweepen ein HTF Key Level.
+
+    Tag 24: True Manipulation = beide Pairs manipulieren in ein HTF Key Level.
+    Was "manipulieren" heisst, steht in Tag 19: "Bewegung in ein
+    High-Timeframe-Key-Level BZW. Liquidity Sweep" - also beides. Ein Beleg
+    ist damit entweder ein Level mit Status "sweep" oder ein Tap in ein
+    HTF-FVG (ab 30m, siehe W1). Eine fruehere Fassung dieser Pruefung
+    verlangte fuer JEDEN Beleg den Status "sweep" und haette FVG-Taps
+    faelschlich als Fehler gemeldet.
     """
     v = d.get("nq_vs_es")
     if not v:
@@ -679,6 +702,24 @@ def pruefe_smt(b, d):
                 "verlangt Sweep auf einer und unberuehrt auf der anderen Seite",
             )
 
+    def belege_pruefen(symbol, levels, status, sym_daten):
+        """Jeder Beleg muss ein Sweep ODER ein getapptes HTF-FVG sein (Tag 19)."""
+        # Alle HTF-FVG-Bezeichner, die es fuer dieses Symbol ueberhaupt gibt.
+        bekannte_fvgs = set()
+        for feld, tf in HTF_FVG_FELDER:
+            for f in sym_daten.get(feld) or []:
+                von, bis = f.get("von"), f.get("bis")
+                if von is not None and bis is not None:
+                    bekannte_fvgs.add(f"{tf}-FVG {von}-{bis}")
+        schlecht = []
+        for k in levels:
+            if k in bekannte_fvgs:
+                continue  # Tap in ein HTF-FVG = Manipulation nach Tag 19
+            if status.get(k, {}).get("status") == "sweep":
+                continue  # Sweep = Manipulation nach Tag 19
+            schlecht.append(k)
+        return schlecht
+
     for e in v.get("true_manipulation") or []:
         nq_lv = e.get("nq_levels") or []
         es_lv = e.get("es_levels") or []
@@ -686,22 +727,24 @@ def pruefe_smt(b, d):
             b.fehler(
                 "True Manipulation",
                 "Tag 24",
-                "gemeldet, aber nicht beide Pairs haben ein Level gesweept",
+                "gemeldet, aber nicht beide Pairs haben manipuliert",
             )
             continue
-        schlecht = [k for k in nq_lv if nq_st.get(k, {}).get("status") != "sweep"]
-        schlecht += [k for k in es_lv if es_st.get(k, {}).get("status") != "sweep"]
+        schlecht = belege_pruefen("nq", nq_lv, nq_st, d.get("nq") or {})
+        schlecht += belege_pruefen("es", es_lv, es_st, d.get("es") or {})
         if schlecht:
             b.fehler(
                 "True Manipulation",
                 "Tag 24",
-                f"diese Levels sind nicht als Sweep belegt: {sorted(set(schlecht))}",
+                f"diese Belege sind weder ein Sweep noch ein HTF-FVG-Tap: "
+                f"{sorted(set(schlecht))}",
             )
         else:
             b.ok(
                 "True Manipulation",
                 "Tag 24",
-                f"NQ {nq_lv} und ES {es_lv} jeweils als Sweep belegt",
+                f"beide Pairs manipuliert - NQ {len(nq_lv)} Beleg(e), "
+                f"ES {len(es_lv)} Beleg(e), jeweils Sweep oder HTF-FVG-Tap",
             )
 
 
@@ -711,8 +754,24 @@ def pruefe_devil_marks(b, sym, d, bars30):
     laut Tag 20: "auch ein winziger Wick von ~0,5 Punkten zaehlt noch als
     wicklos". Die Toleranz ist dort ABSOLUT formuliert, nicht relativ zur
     Kerzenspanne - genau daran wird hier geprueft.
+
+    Das Konzept ist nur fuer NQ und ES definiert (W3 in der Skill
+    "prayn-bootcamp-konzepte"): Tag 20 sagt die 0,5 Punkte am NQ, und das
+    Bootcamp handelt ausschliesslich Index-Futures. Fuer XAU/BTC muss das
+    Feld deshalb null sein - steht dort eine Liste, ist das ein Fehler.
     """
-    for e in d.get("devil_marks_30m") or []:
+    eintraege = d.get("devil_marks_30m")
+    if sym not in DEVIL_MARK_SYMBOLE:
+        if eintraege:
+            b.fehler(f"{sym} Devil Marks", "Tag 20",
+                     f"Devil Marks sind nur fuer {'/'.join(DEVIL_MARK_SYMBOLE)} "
+                     f"definiert, fuer {sym} duerfen keine ausgegeben werden")
+        else:
+            b.ok(f"{sym} Devil Marks", "Tag 20",
+                 "korrekt nicht berechnet - Konzept nur fuer Index-Futures")
+        return
+
+    for e in eintraege or []:
         preis, seite, et = e.get("preis"), e.get("seite"), e.get("et")
         treffer = [x for x in bars30 if x["et"].strftime("%m-%d %H:%M") == et]
         if not treffer:
@@ -727,7 +786,7 @@ def pruefe_devil_marks(b, sym, d, bars30):
                      f"Preis passt nicht zur Kerze um {et}: dort liegt "
                      f"{'High' if seite == 'oben' else 'Low'} bei {round(soll, 2)}")
             continue
-        grenze = x["c"] * 0.000017  # ~0,5 Punkte auf NQ-Niveau
+        grenze = DEVIL_MARK_TOLERANZ  # Tag 20, absolut in Punkten
         wick = (
             x["h"] - max(x["o"], x["c"])
             if seite == "oben"
@@ -897,6 +956,11 @@ def pruefe_daily_profile(b, d):
     if not (london and asia):
         return
 
+    # Nur Tages-/Wochen-/Monatslevel. Die Asia-Levels bleiben bewusst
+    # draussen: Tag 19 definiert Profil 3 als "London nimmt Asia raus, OHNE
+    # ein HTF Key Level zu tappen" - zaehlte der Asia-Sweep selbst als Tap,
+    # koennte Profil 3 nie auftreten. Er steht getrennt in
+    # london_hat_asia_gesweept.
     htf = {
         n: v for n, v in kl.items()
         if n in ("pdh", "pdl", "pwh", "pwl", "pmh", "pml") and v
@@ -904,8 +968,7 @@ def pruefe_daily_profile(b, d):
     getappt = [n for n, v in htf.items() if london["low"] <= v <= london["high"]]
     # Tag 12 zaehlt HTF-FVGs ausdruecklich zu den HTF Key Levels, also
     # gehoeren sie auch in die Profil-2-vs-3-Entscheidung aus Tag 19.
-    for feld, tf in (("fvg_1d", "1d"), ("fvg_4h", "4h"), ("fvg_1h", "1h"),
-                     ("fvg_30m", "30m")):
+    for feld, tf in HTF_FVG_FELDER:
         for f in nq.get(feld) or []:
             von, bis = f.get("von"), f.get("bis")
             if von is None or bis is None:
