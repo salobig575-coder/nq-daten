@@ -21,11 +21,14 @@ import urllib.request
 from datetime import datetime, timezone
 
 # Pro Instrument mehrere Yahoo-Kandidaten. Der erste, der Bars liefert, gewinnt.
-# nq/es sind fuer den Daily Bias, xau/btc laufen nur mit.
+# nq/es tragen den NY-AM Daily Bias, xau/xag/btc die taegliche Frueh-Uebersicht.
+# xag ist dabei nur das korrelierende Pair fuer XAU (SMT/TM, Tag 13/24) und
+# bekommt keinen eigenen Bias.
 SYMBOLS = {
     "nq": ["NQ=F"],
     "es": ["ES=F"],
     "xau": ["XAUUSD=X", "GC=F"],
+    "xag": ["XAGUSD=X", "SI=F"],
     "btc": ["BTC-USD"],
 }
 
