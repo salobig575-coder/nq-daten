@@ -954,11 +954,11 @@ def po3(nq):
 
 STEMPEL = "%Y-%m-%d %H:%M:%S"
 # nq/es tragen den NY-AM Daily Bias (levels.json).
-# xau/xag/btc tragen die Frueh-Uebersicht (levels_extra.json): XAU mit XAG als
-# korrelierendem Pair fuer SMT/True Manipulation (Tag 13/24), BTC ohne Pair und
-# damit ausdruecklich ohne SMT-Block.
+# xau/btc tragen die Frueh-Uebersicht (levels_extra.json). Beide ohne
+# korrelierendes Pair hinterlegt - damit ausdruecklich ohne SMT und ohne
+# True Manipulation.
 BIAS = ("nq", "es")
-EXTRA = ("xau", "xag", "btc")
+EXTRA = ("xau", "btc")
 
 
 def berechne(namen):
@@ -999,24 +999,19 @@ def main():
     with open(os.path.join(DATA, "levels.json"), "w", encoding="utf-8") as fh:
         json.dump(bias, fh, indent=1, ensure_ascii=False)
 
-    # --- Frueh-Uebersicht: Gold (mit Silber als Pair) und Bitcoin ---
+    # --- Frueh-Uebersicht: Gold und Bitcoin ---
     extra = berechne(EXTRA)
-    if all("fehler" not in extra.get(n, {"fehler": 1}) for n in ("xau", "xag")):
-        # SMT/True Manipulation nur fuer XAU gegen XAG (Tag 13/24).
-        extra["xau_vs_xag"] = smt_vergleich(extra["xau"], extra["xag"], "xau", "xag")
-    for n in ("xau", "btc"):
+    for n in EXTRA:
         if "fehler" not in extra.get(n, {"fehler": 1}):
             extra[f"daily_profile_{n}"] = daily_profile(extra[n])
             extra[f"po3_heute_{n}"] = po3(extra[n])
     extra["hinweis"] = (
-        "XAUUSD (Pair: XAGUSD) und BTCUSD fuer die taegliche Frueh-Uebersicht. "
-        "Fuer BTC gibt es bewusst KEIN SMT und keine True Manipulation - es ist "
-        "kein korrelierendes Pair hinterlegt; xau_vs_xag gilt ausschliesslich "
-        "fuer Gold. XAG laeuft nur als Vergleichspaar mit und bekommt keinen "
-        "eigenen Bias. Sessionschnitt ist derselbe wie bei den Futures "
-        "(Handelstag 18:00 ET bis 17:00 ET); BTC handelt durchgehend, Samstag "
-        "und Sonntag sind deshalb eigene Handelstage - PDH/PDL am Montag sind "
-        "bei BTC also Sonntag-High/-Low, nicht Freitag."
+        "XAUUSD und BTCUSD fuer die taegliche Frueh-Uebersicht. Fuer beide gibt "
+        "es bewusst KEIN SMT und keine True Manipulation - es ist kein "
+        "korrelierendes Pair hinterlegt. Sessionschnitt ist derselbe wie bei "
+        "den Futures (Handelstag 18:00 ET bis 17:00 ET); BTC handelt "
+        "durchgehend, Samstag und Sonntag sind deshalb eigene Handelstage - "
+        "PDH/PDL am Montag sind bei BTC also Sonntag-High/-Low, nicht Freitag."
     )
     with open(os.path.join(DATA, "levels_extra.json"), "w", encoding="utf-8") as fh:
         json.dump(extra, fh, indent=1, ensure_ascii=False)
@@ -1034,8 +1029,6 @@ def main():
     print("--- Frueh-Uebersicht (levels_extra.json) ---")
     for n in EXTRA:
         print(" ", zeile(n, extra.get(n, {})))
-    if "xau_vs_xag" in extra:
-        print("  SMT XAU/XAG:", [x["level"] for x in extra["xau_vs_xag"]["smt"]] or "keins")
 
 
 if __name__ == "__main__":
