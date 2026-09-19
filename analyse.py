@@ -55,8 +55,27 @@ DATA_FENSTER_MIN = 30
 # (Tag 11), FVG als 3-Kerzen-Sequenz ohne Groessengrenze (Tag 9), IFVG als
 # Body Close durch das ganze Gap auf derselben Timeframe (Tag 10/16/18),
 # Sweep = nur Wick / Bruch = Body Close (Tag 3), CISD am Body (Tag 4),
-# Devil-Mark-Toleranz ~0,5 Punkte (Tag 20), Sponsor mindestens 30 Minuten
-# (Tag 22), High Timeframe = ueber 30 Minuten (Tag 27).
+# Devil-Mark-Toleranz 0,5 Punkte absolut (Tag 20), Sponsor mindestens 30
+# Minuten (Tag 22).
+#
+# ACHTUNG - das Bootcamp widerspricht sich an zwei Stellen selbst. Beide
+# stehen in der Skill "prayn-bootcamp-konzepte" unter W1/W2 und sind
+# deshalb KEINE woertlichen Regeln, sondern Festlegungen dieses Systems:
+#
+#   W1  Was ist "High Timeframe"? Tag 27 und Tag 12 sagen "alles UEBER 30
+#       Minuten", Tag 22 sagt "MINDESTENS 30 Minuten". Das schliesst sich
+#       aus. Dieses System legt sich auf "ab 30 Minuten einschliesslich"
+#       fest (Tag-22-Lesart). Ein 30m-FVG ist damit HTF Key Level, kann
+#       sponsern, kann einen Rejection Block tragen und ein ITH/ITL
+#       erzeugen. Nie als woertliche Bootcamp-Regel zitieren.
+#   W2  Aus welcher Timeframe entsteht ein ITH/ITL? Tag 16 sagt "alles ueber
+#       15 Minuten, meist ab 30 Minuten" - nochmal eine andere Schwelle.
+#       Dieses System nimmt 1d/4h/1h/30m, also "meist ab 30 Minuten".
+#       15m-FVGs erzeugen kein ITH/ITL.
+#   W3  Devil Marks gelten nur fuer NQ und ES, mit 0,5 Punkten absolut. Das
+#       Bootcamp handelt ausschliesslich Index-Futures und sagt zu anderen
+#       Instrumenten nichts; fuer XAU/BTC wird das Konzept deshalb gar nicht
+#       berechnet statt eine Schwelle zu erfinden.
 # ============================================================================
 OPERATIONALISIERUNGEN = {
     "swing_spanne": (
@@ -99,7 +118,121 @@ OPERATIONALISIERUNGEN = {
         "Gegenrichtung sind woertlich (Tag 10/12/16), nur dieses Mindestmass "
         "fuer 'deliviert' ist eine Auslegung."
     ),
+    "htf_untergrenze": (
+        "High Timeframe = ab 30 Minuten EINSCHLIESSLICH. Das Bootcamp "
+        "widerspricht sich hier selbst: Tag 27 und Tag 12 sagen 'alles ueber "
+        "30 Minuten' (30m waere dann kein HTF), Tag 22 sagt 'mindestens 30 "
+        "Minuten' (30m waere HTF). Dieses System folgt Tag 22, damit dasselbe "
+        "Konzept ueberall gleich behandelt wird. Das ist eine Festlegung, "
+        "keine woertliche Regel."
+    ),
+    "ith_itl_timeframes": (
+        "ITH/ITL werden aus 1d-, 4h-, 1h- und 30m-FVGs gebildet, nicht aus "
+        "15m. Tag 16 sagt 'alles ueber 15 Minuten, meist ab 30 Minuten' - "
+        "zwei Schwellen in einem Satz. Gewaehlt ist 'meist ab 30 Minuten', "
+        "konsistent zu htf_untergrenze."
+    ),
+    "devil_mark_nur_index": (
+        "Devil Marks werden nur fuer NQ und ES berechnet, mit 0,5 Punkten "
+        "absoluter Toleranz. Tag 20 nennt die Toleranz absolut und sagt sie "
+        "am NQ; das Bootcamp handelt ausschliesslich Index-Futures. Fuer XAU "
+        "und BTC wird das Konzept deshalb gar nicht ausgegeben, statt eine "
+        "Schwelle zu erfinden, die dort nicht gedeckt ist."
+    ),
 }
+
+# Symbole, fuer die Devil Marks nach Tag 20 ueberhaupt definiert sind (W3).
+DEVIL_MARK_SYMBOLE = ("nq", "es")
+# Absolute Wick-Toleranz in Punkten, mit der eine Kerze noch als wicklos gilt.
+DEVIL_MARK_TOLERANZ = 0.5
+
+
+def getappte_htf_fvgs(symbol_daten, hoch, tief):
+    """
+    Welche High-Timeframe-FVGs liegen im Fenster hoch/tief?
+
+    Tag 12 definiert "High Timeframe Key Level" ausdruecklich als alle
+    Liquidity Pools PLUS High-Timeframe-FVGs, "auch Daily/Weekly". Die
+    Untergrenze ist im Bootcamp nicht eindeutig - siehe W1 im Kopf dieser
+    Datei; dieses System nimmt ab 30m einschliesslich, deshalb genau diese
+    vier Felder.
+    """
+    getroffen = []
+    if hoch is None or tief is None:
+        return getroffen
+    for feld, tf in (("fvg_1d", "1d"), ("fvg_4h", "4h"),
+                     ("fvg_1h", "1h"), ("fvg_30m", "30m")):
+        for f in symbol_daten.get(feld) or []:
+            von, bis = f.get("von"), f.get("bis")
+            if von is None or bis is None:
+                continue
+            # Ueberlappung des Fensters mit der Zone = Tap
+            if tief <= bis and hoch >= von:
+                getroffen.append(f"{tf}-FVG {von}-{bis}")
+    return getroffen
+
+
+def manipulations_fenster(symbol_daten):
+    """
+    Das Preisfenster, in dem heute die Manipulation stattgefunden hat.
+
+    Tag 23 (PO3) beschreibt das genau: die Kerze oeffnet und manipuliert
+    ZUERST in eine Richtung, bevor sie in die Gegenrichtung distributed.
+    Bullisch OLHC (Open -> Low -> High -> Close), bearisch OHLC. Das
+    Manipulations-Leg ist also die Strecke vom Open bis zu dem Extrem, das
+    ZUERST gedruckt wurde.
+
+    Warum nicht einfach die ganze Tagesspanne: die deckt am Ende des Tages
+    fast jedes nahe HTF-FVG ab. Dann waere jeder Tag automatisch True
+    Manipulation, und die Aussage waere wertlos. Tag 24 meint ein konkretes
+    Manipulations-Ereignis, nicht "der Preis hat heute irgendwann mal ein Gap
+    beruehrt".
+
+    heute_high_zeit_et/heute_low_zeit_et sagen, welches Extrem zuerst kam -
+    dieselbe Quelle, aus der auch po3_form gebildet wird.
+    """
+    h = symbol_daten.get("heute_bisher") or {}
+    open_ = h.get("open")
+    hoch, tief = h.get("high"), h.get("low")
+    if open_ is None or hoch is None or tief is None:
+        return None, None
+
+    hoch_zeit = symbol_daten.get("heute_high_zeit_et")
+    tief_zeit = symbol_daten.get("heute_low_zeit_et")
+    if not hoch_zeit or not tief_zeit:
+        return None, None
+
+    # Welches Extrem kam zuerst? Das ist das Manipulations-Extrem (Tag 23).
+    manip = tief if tief_zeit < hoch_zeit else hoch
+    return max(open_, manip), min(open_, manip)
+
+
+def manipulation_belege(symbol_daten, hoch, tief, pool_namen):
+    """
+    Die EINE Manipulations-Definition des Systems (Tag 19, Querschnitt 26).
+
+    Tag 19 woertlich: "Manipulation: Bewegung in ein High-Timeframe-Key-Level
+    bzw. Liquidity Sweep." Es zaehlt also BEIDES, nicht nur der Sweep.
+
+    Vorher war dieselbe Frage an zwei Stellen unterschiedlich beantwortet:
+    daily_profile() pruefte benannte Key Levels UND HTF-FVGs, smt_vergleich()
+    dagegen nur Sweeps benannter Key Levels. Ein True-Manipulation-Fall, in
+    dem beide Pairs sauber in ein 4h-FVG getappt haben, fiel damit komplett
+    durch. Beide rufen jetzt diese Funktion auf.
+
+    pool_namen sind die Liquidity Pools, die im betrachteten Fenster
+    nachweislich manipuliert wurden. Die muss der Aufrufer bestimmen, weil
+    "beruehrt" je nach Fenster etwas anderes heisst:
+      - daily_profile: Levels, die VOR London schon existierten und in der
+        London-Range liegen. Die London-Levels selbst sind ausgeschlossen -
+        sie entstehen erst in diesem Fenster und liegen trivialerweise darin.
+      - smt_vergleich: Levels mit level_status "sweep" (Tag 3: nur Wick
+        jenseits = Ablehnung). Dort sorgt ab_wann() bereits dafuer, dass ein
+        Session-Level nicht vor seiner Session als gebrochen gilt.
+
+    hoch/tief spannen das Fenster fuer die FVG-Taps auf.
+    """
+    return list(pool_namen) + getappte_htf_fvgs(symbol_daten, hoch, tief)
 
 
 # ============================================================ Einlesen
@@ -452,7 +585,7 @@ def strukturereignisse(bars, spanne=2, max_out=4):
 
     ereignisse = []
     letzte_highs, letzte_lows = [], []
-    for art, p in punkte:
+    for pos, (art, p) in enumerate(punkte):
         if art == "high":
             letzte_highs.append(p)
         else:
@@ -473,8 +606,18 @@ def strukturereignisse(bars, spanne=2, max_out=4):
             continue  # in der Range gibt es nach Tag 3 keine Trend-These
 
         # Was wurde nach diesem Swing mit Body Close genommen?
+        #
+        # WICHTIG: nur bis zum naechsten Swing Point suchen, nicht bis ans
+        # Ende der Serie. Die fruehere Version liess bruch_pruefen ueber den
+        # gesamten Rest laufen. Dadurch wurde ein und derselbe spaete Body
+        # Close jedem vorherigen Swing zugeordnet - teils mit
+        # entgegengesetztem trend_davor, weil sich der Trendstand zwischen
+        # den Swings geaendert hatte. Die ausgegebene Abfolge war damit nicht
+        # die Abfolge BOS -> BOS -> MSS aus Tag 4, sondern ein Mehrfach-Echo
+        # desselben Ereignisses.
         ab = p["i"] + 1
-        fenster = bars[ab:]
+        bis = punkte[pos + 1][1]["i"] + 1 if pos + 1 < len(punkte) else len(bars)
+        fenster = bars[ab:bis]
         if not fenster:
             continue
 
@@ -554,15 +697,26 @@ def finde_fvgs(bars, max_offen=10):
         beruehrt = any(s["l"] < oben and s["h"] > unten for s in spaeter)
         tiefste = min([s["l"] for s in spaeter], default=oben)
         hoechste = max([s["h"] for s in spaeter], default=unten)
-        if tiefste <= unten and hoechste >= oben:
-            continue  # komplett gefuellt
 
         # IFVG: Body Close komplett durch das Gap, auf derselben Timeframe
-        invertiert = False
+        # (Tag 10/16/18). Wird VOR der Gefuellt-Pruefung bestimmt, weil davon
+        # abhaengt, ob das Gap verworfen werden darf.
         if richtung == "bullish":
             invertiert = any(s["c"] < unten for s in spaeter)
         else:
             invertiert = any(s["c"] > oben for s in spaeter)
+
+        if tiefste <= unten and hoechste >= oben and not invertiert:
+            # Komplett gefuellt und nie invertiert -> als Level durch.
+            #
+            # Ein INVERTIERTES Gap bleibt dagegen drin, auch wenn sein
+            # Bereich inzwischen komplett durchlaufen wurde. Tag 10 nutzt
+            # IFVGs ausdruecklich als Entry-Trigger und nennt sie "eines der
+            # ersten Dinge, die man bei einem Trendwechsel sehen kann" - ein
+            # IFVG ist also gerade kein verbrauchtes Level. Die fruehere
+            # Version warf genau diese Faelle weg, sobald der Preis spaeter
+            # nochmal ueber das Gap zurueckkam.
+            continue
 
         raus.append(
             {
@@ -890,19 +1044,24 @@ def rejection_blocks(bars, key_levels, htf_zonen=None, max_out=6):
     return raus[-max_out:]
 
 
-def devil_marks(bars, max_out=5):
+def devil_marks(bars, symbol, max_out=5):
     """
-    Kerze ohne Wick auf einer Seite (Tag 20). Toleranz ist im Bootcamp
-    ABSOLUT formuliert ("auch ein winziger Wick von ~0,5 Punkten zaehlt noch
-    als wicklos"), nicht relativ zur Kerzenspanne. Die fruehere Version liess
-    zusaetzlich alles unter 2 % der Spanne durchgehen - auf einer 300-Punkte-
-    30m-Kerze waeren das 6 Punkte Wick gewesen, die dann faelschlich als
-    Devil Mark gezaehlt haetten. Deshalb jetzt nur noch die absolute
-    Schwelle, am Preisniveau skaliert, damit sie auf NQ, ES, XAU und BTC
-    gleichermassen ~0,5 NQ-Punkten entspricht.
+    Kerze ohne Wick auf einer Seite (Tag 20).
+
+    Toleranz ist im Bootcamp ABSOLUT formuliert ("auch ein winziger Wick von
+    ~0,5 Punkten zaehlt noch als wicklos") und wird am NQ gesagt.
+
+    NUR FUER NQ UND ES (W3). Eine fruehere Version skalierte die 0,5 Punkte
+    relativ zum Preis, damit sie auch auf XAU und BTC "passen". Das war eine
+    erfundene Regel: das Bootcamp handelt ausschliesslich Index-Futures und
+    sagt zu anderen Instrumenten nichts. Statt eine Schwelle zu erfinden,
+    wird das Konzept fuer XAU/BTC gar nicht mehr berechnet - im Bias
+    erscheint dort dann auch keine Devil-Mark-Zeile.
 
     Beide Seiten werden geprueft: eine Kerze kann oben UND unten wicklos sein.
     """
+    if symbol not in DEVIL_MARK_SYMBOLE:
+        return None
     raus = []
     # Die letzte Bar ist am Datenrand fast immer noch offen. Eine laufende
     # Kerze hat naturgemaess kaum Wicks und wuerde sonst jedes Mal als Devil
@@ -913,7 +1072,7 @@ def devil_marks(bars, max_out=5):
             continue
         wick_oben = b["h"] - max(b["o"], b["c"])
         wick_unten = min(b["o"], b["c"]) - b["l"]
-        floor = b["c"] * 0.000017  # ~0,5 Punkte bei einem NQ-Preis um 29000
+        floor = DEVIL_MARK_TOLERANZ  # Tag 20, absolut in Punkten
         if wick_oben <= floor:
             raus.append({"seite": "oben", "preis": round(b["h"], 2), "et": b["et"].strftime("%m-%d %H:%M")})
         if wick_unten <= floor:
@@ -933,11 +1092,29 @@ def equal_levels(bars, max_out=5):
     def cluster(punkte, art):
         raus = []
         for i in range(len(punkte) - 1):
+            # Die ganze Reihe gleich hoher Punkte einsammeln, nicht nur das
+            # naechste Paar. Tag 4 verlangt "immer DAS LETZTE High dieser
+            # Reihe" - bei drei oder mehr gestapelten Highs war die fruehere
+            # Version nach dem ersten Treffer stehengeblieben und hat damit
+            # das zweite statt des letzten gemeldet.
+            # Verglichen wird jeder Punkt gegen den ERSTEN der Reihe, nicht
+            # gegen den jeweils vorigen. Sonst koennte die Reihe schrittweise
+            # wegdriften: fuenf Punkte, die jeweils knapp innerhalb der
+            # Toleranz zum Vorgaenger liegen, haetten zwischen dem ersten und
+            # dem letzten ein Vielfaches davon - und "auf aehnlicher Hoehe"
+            # (Tag 7) waere nicht mehr erfuellt.
+            anker = punkte[i]["preis"]
+            reihe = [i]
             for j in range(i + 1, min(i + 5, len(punkte))):
+                if abs(punkte[j]["preis"] - anker) / max(anker, 1e-9) < EQ_TOLERANZ:
+                    reihe.append(j)
+                else:
+                    break
+            if len(reihe) < 2:
+                continue
+            for j in (reihe[-1],):
                 a, b = punkte[i]["preis"], punkte[j]["preis"]
                 abstand = abs(a - b)
-                if abstand / max(a, 1e-9) >= EQ_TOLERANZ:
-                    continue
                 # Tag 7 unterscheidet ausdruecklich: "Equal Highs/Lows = zwei
                 # Highs/Lows auf EXAKT gleicher Hoehe. Sehr selten, aber sehr
                 # starke Pools." und davon getrennt "Relative Equal High/Low =
@@ -950,11 +1127,13 @@ def equal_levels(bars, max_out=5):
                 # Highs auf aehnlicher Hoehe aneinanderliegen. Problem: unklar,
                 # welches das signifikante High ist. Regel aus dem Video:
                 # immer DAS LETZTE High dieser Reihe nehmen." In Tag 16 als
-                # LRL wiederholt.
+                # LRL wiederholt. (Tag 16 definiert die Konstellation, die
+                # Auswahlregel selbst steht nur in Tag 4.)
                 # Die fruehere Version nahm stattdessen das hoechste (bzw.
                 # tiefste) der Reihe - das ist eine andere Regel und stand so
                 # nirgends im Bootcamp.
                 preis_level = b
+                anzahl = len(reihe)
                 spaeter = bars[punkte[j]["i"] + 1 :]
                 # Tag 7: zaehlt nur, solange "noch nicht gesweept".
                 schon_gesweept = (
@@ -969,11 +1148,23 @@ def equal_levels(bars, max_out=5):
                             "exakt": exakt,
                             "preis": round(preis_level, 2),
                             "abstand": round(abstand, 2),
+                            # Wie viele Punkte die Reihe hat. Ab 3 ist es die
+                            # "gestackte" Form, die Tag 16 als Low Resistance
+                            # Liquidity beschreibt.
+                            "anzahl": anzahl,
                             "et": punkte[j]["bar"]["et"].strftime("%m-%d %H:%M"),
                         }
                     )
-                break
-        return raus[-max_out:]
+        # Dieselbe Reihe wird von mehreren Startpunkten aus gefunden und
+        # liefert dann denselben Preis. Pro Preis nur einmal, das erste
+        # Vorkommen zaehlt (das ist die vollstaendigste Reihe).
+        einmalig, gesehen = [], set()
+        for r in raus:
+            if r["preis"] in gesehen:
+                continue
+            gesehen.add(r["preis"])
+            einmalig.append(r)
+        return einmalig[-max_out:]
 
     return cluster(hi, "EQH") + cluster(lo, "EQL")
 
@@ -1462,7 +1653,10 @@ def auswerten(name, stand_utc=None):
             + intermediate_levels(bars_z[-480:], "30m")
         ),
         "rejection_blocks_30m": rejection_blocks(bars_z[-240:], key_levels, htf_zonen),
-        "devil_marks_30m": devil_marks(bars_z[-120:]),
+        # Tag 20 / W3: nur fuer NQ und ES definiert. Bei XAU/BTC steht hier
+        # null, damit im Bias klar ist, dass das Konzept dort nicht gilt -
+        # statt einer Zahl, die das Bootcamp nicht deckt.
+        "devil_marks_30m": devil_marks(bars_z[-120:], name),
         "equal_levels_1h": equal_levels(b1h[-160:]),
         "nwog": nwog,
         "offene_nwog": offene_nwog,
@@ -1533,17 +1727,42 @@ def smt_vergleich(nq, es, a_name="nq", b_name="es"):
         """Buyside liegt ueber Highs, Sellside unter Lows (Tag 6)."""
         return "buyside" if level_name.endswith(("h", "high")) else "sellside"
 
+    # --- True Manipulation (Tag 24) ---
+    #
+    # Tag 24: "beide Pairs manipulieren in ein High Timeframe Key Level".
+    # Was "manipulieren" heisst, steht in Tag 19: "Bewegung in ein
+    # High-Timeframe-Key-Level BZW. Liquidity Sweep" - also beides.
+    #
+    # Die fruehere Version zaehlte ausschliesslich Sweeps benannter Key
+    # Levels. Ein Tag, an dem beide Pairs sauber in ein 4h- oder Daily-FVG
+    # getappt haben, war damit nie True Manipulation, obwohl Tag 19 genau das
+    # als Manipulation definiert. Gleichzeitig pruefte daily_profile dieselbe
+    # Frage anders. Beide nutzen jetzt manipulation_belege().
     a_sweeps = [k for k, v in nq_status.items() if v["status"] == "sweep"]
     b_sweeps = [k for k, v in es_status.items() if v["status"] == "sweep"]
-    if a_sweeps and b_sweeps:
+
+    a_belege = manipulation_belege(nq, *manipulations_fenster(nq), a_sweeps)
+    b_belege = manipulation_belege(es, *manipulations_fenster(es), b_sweeps)
+
+    if a_belege and b_belege:
+        # Die Seite (buyside/sellside) laesst sich nur fuer benannte Pools
+        # bestimmen - ein FVG-Tap hat keine Seite im Sinne von Tag 6.
         a_seiten = sorted({seite(k) for k in a_sweeps})
         b_seiten = sorted({seite(k) for k in b_sweeps})
         raus["true_manipulation"].append(
             {
-                f"{a_name}_levels": a_sweeps,
-                f"{b_name}_levels": b_sweeps,
+                f"{a_name}_levels": a_belege,
+                f"{b_name}_levels": b_belege,
                 # Gleiches Level auf beiden Seiten = klassischster TM-Fall
-                "gleiche_levels": sorted(set(a_sweeps) & set(b_sweeps)),
+                "gleiche_levels": sorted(set(a_belege) & set(b_belege)),
+                # Getrennt ausgewiesen, damit im Bias unterscheidbar bleibt,
+                # ob die Manipulation ein Sweep (Wick durch ein Level) oder
+                # ein Tap in ein HTF-FVG war. Beides ist nach Tag 19
+                # Manipulation, liest sich im Text aber anders.
+                f"{a_name}_sweeps": a_sweeps,
+                f"{b_name}_sweeps": b_sweeps,
+                f"{a_name}_fvg_taps": [x for x in a_belege if x not in a_sweeps],
+                f"{b_name}_fvg_taps": [x for x in b_belege if x not in b_sweeps],
                 # Tag 24 sagt ausdruecklich, dass es NICHT dasselbe Level sein
                 # muss ("hoeher oder tiefer zaehlt auch"). Zur Richtung sagt
                 # das Bootcamp nichts, deshalb wird hier nicht gefiltert -
@@ -1552,6 +1771,11 @@ def smt_vergleich(nq, es, a_name="nq", b_name="es"):
                 f"{a_name}_seiten": a_seiten,
                 f"{b_name}_seiten": b_seiten,
                 "gleiche_seite": sorted(set(a_seiten) & set(b_seiten)),
+                "definition": (
+                    "Tag 24 + Tag 19: Manipulation = Sweep ODER Tap in ein "
+                    "HTF Key Level. Beide Pairs muessen manipuliert haben, "
+                    "nicht zwingend in dasselbe Level."
+                ),
             }
         )
 
@@ -1586,30 +1810,31 @@ def daily_profile(d):
     if not (asia and london):
         return {"profil": "noch nicht bestimmbar"}
 
-    k = d.get("key_levels", {})
-    htf = {
-        n: v
-        for n, v in k.items()
-        if n in ("pdh", "pdl", "pwh", "pwl", "pmh", "pml") and v
-    }
-    getappt = [n for n, v in htf.items() if london["low"] <= v <= london["high"]]
-
     # Tag 19 unterscheidet Profil 2 von Profil 3 danach, ob London in ein
-    # "High-Timeframe-Key-Level" manipuliert hat. Was ein HTF Key Level ist,
-    # definiert Tag 12 ausdruecklich: alle Liquidity Pools PLUS
-    # High-Timeframe-FVGs (alles ueber 30 Minuten, auch Daily/Weekly).
-    # Die fruehere Version pruefte nur PDH/PDL/PWH/PWL - ein London, das
-    # sauber in ein 4h- oder Daily-FVG hineinmanipuliert hat, landete damit
-    # faelschlich als "Judas Swing ohne Grund" in Profil 3.
-    for feld, tf in (("fvg_1d", "1d"), ("fvg_4h", "4h"), ("fvg_1h", "1h"),
-                     ("fvg_30m", "30m")):
-        for f in d.get(feld) or []:
-            von, bis = f.get("von"), f.get("bis")
-            if von is None or bis is None:
-                continue
-            # Tap = London hat die Zone beruehrt
-            if london["low"] <= bis and london["high"] >= von:
-                getappt.append(f"{tf}-FVG {von}-{bis}")
+    # "High-Timeframe-Key-Level" manipuliert hat. Diese Frage beantwortet im
+    # ganzen System genau eine Funktion - manipulation_belege(). Eine fruehere
+    # Version pruefte hier nur PDH/PDL/PWH/PWL und an anderer Stelle
+    # (smt_vergleich) etwas voellig anderes; jetzt ist es dieselbe Definition.
+    #
+    # Als Pools zaehlen hier NUR die Tages-/Wochen-/Monatslevel.
+    #
+    # Die Asia-Levels sind ausdruecklich NICHT dabei, obwohl Tag 12 Session
+    # Highs/Lows sonst zu den HTF Key Levels zaehlt: Tag 19 beschreibt
+    # Profil 3 als "London nimmt Asia raus, OHNE ein HTF Key Level zu
+    # tappen". Wuerde der Asia-Sweep selbst als Tap zaehlen, waere Profil 3
+    # per Konstruktion unerreichbar. Der Asia-Sweep steht deshalb getrennt
+    # in london_hat_asia_gesweept.
+    #
+    # Die London-Levels selbst sind ebenfalls raus - sie entstehen erst in
+    # diesem Fenster und laegen trivialerweise darin. NY-AM-Levels gibt es
+    # zum London-Zeitpunkt noch nicht.
+    k = d.get("key_levels", {})
+    vor_london = ("pdh", "pdl", "pwh", "pwl", "pmh", "pml")
+    pools = [
+        n for n in vor_london
+        if k.get(n) is not None and london["low"] <= k[n] <= london["high"]
+    ]
+    getappt = manipulation_belege(d, london["high"], london["low"], pools)
     london_sweep_asia = london["high"] > asia["high"] or london["low"] < asia["low"]
 
     if not london_sweep_asia and not getappt:
