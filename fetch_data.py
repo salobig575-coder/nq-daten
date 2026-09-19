@@ -109,6 +109,63 @@ def to_rows(payload):
     return rows, meta
 
 
+NEWS_URL = "https://nfs.faireconomy.media/ff_calendar_thisweek.json"
+
+
+def hole_news():
+    """
+    Holt den ForexFactory-Wochenkalender als JSON und behaelt die roten
+    USD-Termine.
+
+    Gebraucht wird das fuer Tag 7, Liquidity Pool 4: "Data High/Low -
+    Highs/Lows, die direkt nach roten News (Forex Factory, z.B. CPI)
+    entstehen - meist auf dem 5-Minuten-Chart markiert. Die Wicks der
+    News-Reaktion gelten als starke Liquidity Pools/Targets." Ohne die
+    Termine laesst sich dieser Pool gar nicht berechnen, er hat deshalb
+    bisher komplett gefehlt.
+
+    Der JSON-Feed wird dem HTML-Kalender vorgezogen, weil das Impact-Feld
+    dort Klartext ist ("High") statt eines Farb-Icons.
+
+    Schlaegt der Abruf fehl, ist das kein harter Fehler: die Kursdaten sind
+    davon unabhaengig, und analyse.py laesst den Pool dann einfach weg.
+    """
+    try:
+        req = urllib.request.Request(
+            NEWS_URL, headers={"User-Agent": UA, "Accept": "application/json"}
+        )
+        ctx = ssl.create_default_context()
+        with urllib.request.urlopen(req, timeout=45, context=ctx) as resp:
+            roh = json.loads(resp.read().decode("utf-8"))
+    except Exception as exc:  # noqa: BLE001
+        print(f"HINWEIS News-Kalender nicht erreichbar: {exc}", file=sys.stderr)
+        return {"status": "fehler", "meldung": str(exc)[:300], "termine": []}
+
+    termine = []
+    for e in roh if isinstance(roh, list) else []:
+        if e.get("country") != "USD":
+            continue
+        if (e.get("impact") or "").lower() != "high":
+            continue
+        termine.append(
+            {
+                "titel": e.get("title"),
+                "zeit": e.get("date"),
+                "impact": e.get("impact"),
+                "forecast": e.get("forecast"),
+                "previous": e.get("previous"),
+            }
+        )
+    termine.sort(key=lambda t: t["zeit"] or "")
+    print(f"OK   news: {len(termine)} rote USD-Termine diese Woche")
+    return {
+        "status": "ok",
+        "geholt_utc": datetime.now(tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
+        "quelle": NEWS_URL,
+        "termine": termine,
+    }
+
+
 def main():
     os.makedirs(OUT_DIR, exist_ok=True)
     meta_out = {
@@ -156,6 +213,13 @@ def main():
                 meta_out["reihen"][key] = {"status": "fehler", "meldung": str(exc)[:300]}
                 print(f"FEHLER {key}: {exc}", file=sys.stderr)
             time.sleep(1.5)  # hoeflich zu Yahoo sein
+
+    # Rote USD-News fuer die Data Highs/Lows (Tag 7). Bewusst nach den
+    # Kursdaten, damit ein Ausfall hier die Kurse nicht gefaehrdet.
+    news = hole_news()
+    with open(os.path.join(OUT_DIR, "news.json"), "w", encoding="utf-8") as fh:
+        json.dump(news, fh, indent=1, ensure_ascii=False)
+    meta_out["news"] = {"status": news.get("status"), "termine": len(news.get("termine", []))}
 
     with open(os.path.join(OUT_DIR, "meta.json"), "w", encoding="utf-8") as fh:
         json.dump(meta_out, fh, indent=2, ensure_ascii=False)
