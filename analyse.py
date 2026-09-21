@@ -146,6 +146,15 @@ DEVIL_MARK_SYMBOLE = ("nq", "es")
 # Absolute Wick-Toleranz in Punkten, mit der eine Kerze noch als wicklos gilt.
 DEVIL_MARK_TOLERANZ = 0.5
 
+# Symbole ohne Asia/London/NY-AM-Sessions: das sind CME-Handelssessions
+# fuer Futures, XAU (Forex-artiger 24h-Handel) und BTC (24/7-Handel) kennen
+# diese Fenster nicht. Betrifft key_levels (asia_/london_/ny_am_*),
+# sessions_heute, stacked_po3 (haengt am NY-AM-Fenster) sowie
+# daily_profile_xau/daily_profile_btc, das komplett auf Asia/London beruht
+# und fuer diese beiden Symbole deshalb gar nicht mehr berechnet wird
+# (siehe main()).
+SYMBOLE_OHNE_SESSIONS = ("xau", "btc")
+
 
 def getappte_htf_fvgs(symbol_daten, hoch, tief):
     """
@@ -268,9 +277,13 @@ def vielleicht_laden(name, suffix):
         return []
 
 
-# Serien, die auswerten() tatsaechlich einliest (1h/1d werden von fetch_data.py
-# zwar geholt, aber hier nie gelesen - 1h/4h werden aus 30m resampled).
+# Serien, die auswerten() tatsaechlich einliest. Fuer nq/es wird 1h/1d von
+# fetch_data.py zwar geholt, aber hier nie gelesen - 1h/4h/1d werden aus 30m
+# resampled. Fuer xau/btc kommt "1h" dazu (siehe htf_kerzen()): daraus werden
+# jetzt auch 4h und die Tageskerze gebaut, mit viel laengerer Reichweite als
+# die auf 60 Tage gedeckelten 30m-Bars es erlauben wuerden.
 GENUTZTE_SUFFIXE = ("5m", "15m", "30m")
+SYMBOLE_MIT_1H_SUFFIX = ("xau", "btc")
 
 
 def lade_fetch_meta():
@@ -292,14 +305,15 @@ def lade_fetch_meta():
 
 
 def fetch_warnung_fuer(meta, name):
-    """Welche der tatsaechlich genutzten Serien (5m/15m/30m) sind beim
-    letzten fetch_data.py-Lauf fehlgeschlagen und liegen deshalb noch mit
-    alten Bars vor?"""
+    """Welche der tatsaechlich genutzten Serien (5m/15m/30m, bei xau/btc dazu
+    1h) sind beim letzten fetch_data.py-Lauf fehlgeschlagen und liegen
+    deshalb noch mit alten Bars vor?"""
     if not meta:
         return None
     reihen = meta.get("reihen", {})
     fehler = []
-    for suffix in GENUTZTE_SUFFIXE:
+    suffixe = GENUTZTE_SUFFIXE + ("1h",) if name in SYMBOLE_MIT_1H_SUFFIX else GENUTZTE_SUFFIXE
+    for suffix in suffixe:
         eintrag = reihen.get(f"{name}_{suffix}")
         if eintrag and eintrag.get("status") != "ok":
             fehler.append(f"{name}_{suffix}: {eintrag.get('meldung', 'unbekannter Fehler')}")
@@ -433,6 +447,51 @@ def resample(bars, stunden, nur_geschlossene=False, stand_utc=None):
     if nur_geschlossene:
         out = geschlossene(out, stunden * 60, stand_utc)
     return out
+
+
+# Symbole, fuer die 4h/1d nicht aus den (auf 60 Tage gedeckelten) 30m-Bars
+# resampled werden, sondern aus einer eigenen, viel laenger zurueckreichenden
+# 1h-Serie (siehe fetch_data.py, SERIES_LANGE_1H_HISTORIE). Grund: reines
+# 30m-Resampling laesst jede Struktur (v.a. FVGs), die aelter als 60 Tage
+# ist, ersatzlos aus fvg_1d/fvg_4h/trend_1d/struktur_1d etc. herausfallen -
+# genau das hat im Januar zu einem falschen XAU-Daily-Bias gefuehrt (eine
+# Reihe Daily-FVGs war schlicht nicht mehr sichtbar, obwohl der Preis danach
+# genau dorthin gelaufen ist). NQ/ES bleiben unveraendert, wie bisher aus 30m.
+SYMBOLE_LANGE_HTF_HISTORIE = ("xau", "btc")
+# Unter dieser Anzahl 1h-Bars wird der eigenen 1h-Serie nicht getraut (z.B.
+# eine frisch angelegte oder fehlgeschlagene CSV) - dann faellt es auf das
+# alte 30m-Resampling zurueck, damit ein einzelner kaputter Abruf nicht die
+# ganze Analyse lahmlegt.
+MIN_1H_BARS_EIGENE_SERIE = 60
+
+
+def htf_kerzen(name, bars_30m, bars_30m_z, stand_utc):
+    """
+    Baut 1h-, 4h- und Tageskerzen fuer auswerten().
+
+    Fuer NQ/ES wie bisher: alle drei aus den 30m-Bars resampled/gruppiert -
+    deren Reichweite (60 Tage) war dort nie das Problem, weil niemand mehr
+    als ein paar Wochen zurueckschaut.
+
+    Fuer XAU/BTC aus der eigenen, viel laenger zurueckreichenden 1h-Serie:
+    b1h direkt daraus (nur die noch laufende Kerze abgeschnitten), b4h und
+    b1d per resample()/zu_tageskerzen() DARAUS statt aus den 30m-Bars - beide
+    Funktionen gruppieren nur nach Stunden-Anker bzw. Handelstag und sind
+    unabhaengig von der Balkengroesse der Eingabe. Schlaegt das fehl (Serie
+    fehlt oder ist zu kurz), Rueckfall auf dieselbe 30m-Methode wie bei NQ/ES.
+    """
+    if name in SYMBOLE_LANGE_HTF_HISTORIE:
+        b1h_roh = vielleicht_laden(name, "1h")
+        b1h_lang = geschlossene(b1h_roh, 60, stand_utc)
+        if len(b1h_lang) >= MIN_1H_BARS_EIGENE_SERIE:
+            b4h = resample(b1h_lang, 4, nur_geschlossene=True, stand_utc=stand_utc)
+            b1d = zu_tageskerzen(b1h_lang)
+            return b1h_lang, b4h, b1d
+
+    b1h = resample(bars_30m, 1, nur_geschlossene=True, stand_utc=stand_utc)
+    b4h = resample(bars_30m, 4, nur_geschlossene=True, stand_utc=stand_utc)
+    b1d = zu_tageskerzen(bars_30m_z)
+    return b1h, b4h, b1d
 
 
 # ============================================================ Struktur
@@ -1471,9 +1530,17 @@ def auswerten(name, stand_utc=None):
     pwl = wochen_hl[pw_key]["low"] if pw_key else None
 
     heute_bars = tage[heute]
-    asia = hl([b for b in heute_bars if in_fenster(b, 20, 0, 0, 0)])
-    london = hl([b for b in heute_bars if in_fenster(b, 2, 0, 6, 0)])
-    ny_am = hl([b for b in heute_bars if in_fenster(b, 9, 30, 11, 0)])
+    # Asia/London/NY-AM sind Futures-Handelssessions (CME-Handelszeiten).
+    # XAU/BTC handeln durchgehend ohne solche Sessions - fuer diese beiden
+    # wird das Konzept deshalb gar nicht erst berechnet, statt Zahlen
+    # auszugeben, die dort nichts bedeuten (siehe SYMBOLE_OHNE_SESSIONS).
+    hat_sessions = name not in SYMBOLE_OHNE_SESSIONS
+    if hat_sessions:
+        asia = hl([b for b in heute_bars if in_fenster(b, 20, 0, 0, 0)])
+        london = hl([b for b in heute_bars if in_fenster(b, 2, 0, 6, 0)])
+        ny_am = hl([b for b in heute_bars if in_fenster(b, 9, 30, 11, 0)])
+    else:
+        asia = london = ny_am = None
 
     # Fuer PO3 (Tag 23): welches Extrem kam zuerst? Nicht raten (Naehe zum
     # Open), sondern am tatsaechlichen Zeitpunkt der Kerze festmachen, sonst
@@ -1504,20 +1571,23 @@ def auswerten(name, stand_utc=None):
         "pdh": pdh, "pdl": pdl, "pwh": pwh, "pwl": pwl,
         "pmh": pm["high"] if pm else None,
         "pml": pm["low"] if pm else None,
-        "asia_high": asia["high"] if asia else None,
-        "asia_low": asia["low"] if asia else None,
-        "london_high": london["high"] if london else None,
-        "london_low": london["low"] if london else None,
-        # Tag 7, Pool 1: "Jede Session (Asia, London, New York) hinterlaesst
-        # ein High und ein Low - starke Liquidity Pools." New York fehlte
-        # bisher in den Key Levels, obwohl der typische Ablauf im Bootcamp
-        # ausdruecklich ueber das London High in die NY-Session laeuft.
-        # Vor 11:00 ET ist die NY-AM-Session noch nicht fertig; dann steht
-        # hier der Stand bis jetzt, und level_status prueft erst ab Ende des
-        # Fensters auf einen Bruch.
-        "ny_am_high": ny_am["high"] if ny_am else None,
-        "ny_am_low": ny_am["low"] if ny_am else None,
     }
+    if hat_sessions:
+        key_levels.update({
+            "asia_high": asia["high"] if asia else None,
+            "asia_low": asia["low"] if asia else None,
+            "london_high": london["high"] if london else None,
+            "london_low": london["low"] if london else None,
+            # Tag 7, Pool 1: "Jede Session (Asia, London, New York)
+            # hinterlaesst ein High und ein Low - starke Liquidity Pools."
+            # New York fehlte bisher in den Key Levels, obwohl der typische
+            # Ablauf im Bootcamp ausdruecklich ueber das London High in die
+            # NY-Session laeuft. Vor 11:00 ET ist die NY-AM-Session noch
+            # nicht fertig; dann steht hier der Stand bis jetzt, und
+            # level_status prueft erst ab Ende des Fensters auf einen Bruch.
+            "ny_am_high": ny_am["high"] if ny_am else None,
+            "ny_am_low": ny_am["low"] if ny_am else None,
+        })
 
     b15_roh = vielleicht_laden(name, "15m")
     b5_roh = vielleicht_laden(name, "5m")
@@ -1578,14 +1648,12 @@ def auswerten(name, stand_utc=None):
                 eintrag["laufende_kerze_jenseits"] = True
         status[k] = eintrag
 
-    b1h = resample(bars, 1, nur_geschlossene=True, stand_utc=stand_utc)
-    b4h = resample(bars, 4, nur_geschlossene=True, stand_utc=stand_utc)
+    # 1h/4h/1d: bei XAU/BTC aus einer eigenen, lange zurueckreichenden
+    # 1h-Serie statt aus den auf 60 Tage gedeckelten 30m-Bars (htf_kerzen()).
+    b1h, b4h, b1d = htf_kerzen(name, bars, bars_z, stand_utc)
 
     # Tag 20: NWOG/NDOG werden auf dem 5-Minuten-Chart markiert.
     nwog, ndog, offene_nwog = opening_gaps(b5 if len(b5) > 100 else bars)
-
-    # Tageskerzen nach CME-Schnitt. Tag 9: "Daily-FVG > 1H/30-Min/15-Min-FVG".
-    b1d = zu_tageskerzen(bars_z)
 
     # HTF-FVGs erst berechnen, weil sie sowohl in die Ausgabe gehen als auch
     # als moegliche Sponsoren fuer die LTF-FVGs dienen (Tag 22: ab 30m,
@@ -1616,8 +1684,13 @@ def auswerten(name, stand_utc=None):
         "heute_high_zeit_et": hi_bar["et"].strftime("%m-%d %H:%M") if hi_bar else None,
         "heute_low_zeit_et": lo_bar["et"].strftime("%m-%d %H:%M") if lo_bar else None,
         "po3_form": po3_form,
-        "stacked_po3": stacked_po3(b15, key_levels, htf_zonen, heute),
-        "sessions_heute": {"asia": asia, "london": london, "ny_am": ny_am},
+        # Stacked PO3 baut auf dem NY-AM-Fenster auf (09:30-11:00 ET) - bei
+        # XAU/BTC gibt es das genauso wenig wie die anderen Sessions.
+        "stacked_po3": stacked_po3(b15, key_levels, htf_zonen, heute) if hat_sessions else None,
+        # Bei XAU/BTC bewusst kein sessions_heute-Feld (siehe hat_sessions
+        # oben) statt eines mit Nullen gefuellten Blocks, der eine Session
+        # vortaeuscht, die es dort nicht gibt.
+        **({"sessions_heute": {"asia": asia, "london": london, "ny_am": ny_am}} if hat_sessions else {}),
         "tage": tages_hl,
         "wochen": wochen_hl,
         "laufende_kerze_ausgeschlossen": laufende_kerze,
@@ -2033,13 +2106,20 @@ def main():
     extra = berechne(EXTRA)
     for n in EXTRA:
         if "fehler" not in extra.get(n, {"fehler": 1}):
-            extra[f"daily_profile_{n}"] = daily_profile(extra[n])
+            # Kein daily_profile_{n}: das Profil (1/2/3) unterscheidet sich
+            # ausschliesslich danach, ob/wie London die Asia-Session
+            # manipuliert - beides Sessions, die es bei XAU/BTC nicht gibt
+            # (SYMBOLE_OHNE_SESSIONS). po3_heute bleibt: das ist die
+            # Open-High-Low-Close-Form des Handelstags, kein Session-Konzept.
             extra[f"po3_heute_{n}"] = po3(extra[n])
     extra["hinweis"] = (
         "XAUUSD und BTCUSD fuer die taegliche Frueh-Uebersicht. Fuer beide gibt "
         "es bewusst KEIN SMT und keine True Manipulation - es ist kein "
-        "korrelierendes Pair hinterlegt. Sessionschnitt ist derselbe wie bei "
-        "den Futures (Handelstag 18:00 ET bis 17:00 ET); BTC handelt "
+        "korrelierendes Pair hinterlegt, und KEINE Asia-/London-/NY-AM-"
+        "Sessions (dafuer 1h-Kerzen mit deutlich laengerer Historie als bei "
+        "NQ/ES, siehe fvg_1d/fvg_4h/fvg_1h - dort faellt jetzt nichts mehr "
+        "aus dem letzten Monat heraus). Tagesschnitt ist trotzdem derselbe "
+        "wie bei den Futures (Handelstag 18:00 ET bis 17:00 ET); BTC handelt "
         "durchgehend, Samstag und Sonntag sind deshalb eigene Handelstage - "
         "PDH/PDL am Montag sind bei BTC also Sonntag-High/-Low, nicht Freitag."
     )
