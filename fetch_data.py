@@ -1,13 +1,25 @@
 #!/usr/bin/env python3
 """
-Holt OHLC-Bars fuer NQ und ES von Yahoo Finance und schreibt sie als CSV.
-Laeuft auf GitHub Actions (dort ist das Netz offen).
+Holt OHLC-Bars fuer NQ, ES, XAU und BTC von Yahoo Finance und schreibt sie
+als CSV. Laeuft auf GitHub Actions (dort ist das Netz offen).
 
 Ausgabe in data/:
-  nq_30m.csv, es_30m.csv   -> 30-Minuten-Bars, letzte 60 Tage
-  nq_1h.csv,  es_1h.csv    -> 1-Stunden-Bars,  letzte 60 Tage
-  nq_1d.csv,  es_1d.csv    -> Tages-Bars,      letzte 6 Monate
-  meta.json                -> Zeitstempel und Status jedes Abrufs
+  nq_30m.csv, es_30m.csv, xau_30m.csv, btc_30m.csv -> 30-Minuten-Bars, 60 Tage
+  nq_1h.csv,  es_1h.csv                            -> 1-Stunden-Bars,  60 Tage
+  xau_1h.csv, btc_1h.csv                           -> 1-Stunden-Bars, 730 Tage
+  nq_1d.csv,  es_1d.csv,  xau_1d.csv,  btc_1d.csv  -> Tages-Bars,     6 Monate
+  meta.json                                        -> Zeitstempel/Status je Abruf
+
+XAU/BTC bekommen bei 1h bewusst eine viel laengere Reichweite als NQ/ES
+(730 statt 60 Tage - das Maximum, das Yahoo fuer die 60m/1h-Aufloesung
+herausgibt): analyse.py baut daraus fuer diese beiden Symbole jetzt auch die
+4h- und Tageskerzen (siehe dort, htf_kerzen()), statt sie wie bisher aus den
+auf 60 Tage gedeckelten 30m-Bars zu resamplen. Ohne das fielen FVGs/Levels,
+die aelter als 60 Tage sind, komplett aus der Analyse - genau das Problem,
+das im Januar zu einem falschen Daily Bias bei XAU gefuehrt hat (eine Reihe
+Daily-FVGs war schlicht nicht mehr sichtbar). 5m/15m/30m bleiben unveraendert,
+weil Yahoo dafuer ohnehin keine laengere Historie herausgibt, egal welche
+Range angefragt wird.
 """
 
 import json
@@ -40,6 +52,23 @@ SERIES = [
     ("1h", "1h", "60d"),
     ("1d", "1d", "6mo"),
 ]
+
+# XAU/BTC: dieselben Serien, aber 1h mit 730 Tagen statt 60 (siehe Docstring
+# oben). NQ/ES bleiben bewusst unveraendert - der Fix gilt nur fuer XAU/BTC.
+SYMBOLE_LANGE_1H_HISTORIE = ("xau", "btc")
+SERIES_LANGE_1H_HISTORIE = [
+    ("5m", "5m", "30d"),
+    ("15m", "15m", "60d"),
+    ("30m", "30m", "60d"),
+    ("1h", "1h", "730d"),
+    ("1d", "1d", "6mo"),
+]
+
+
+def series_fuer(name):
+    if name in SYMBOLE_LANGE_1H_HISTORIE:
+        return SERIES_LANGE_1H_HISTORIE
+    return SERIES
 
 HOSTS = [
     "https://query1.finance.yahoo.com/v8/finance/chart/",
@@ -175,7 +204,7 @@ def main():
     failures = 0
 
     for name, kandidaten in SYMBOLS.items():
-        for suffix, interval, rng in SERIES:
+        for suffix, interval, rng in series_fuer(name):
             key = f"{name}_{suffix}"
             try:
                 rows, ymeta, symbol = [], {}, None
@@ -224,7 +253,7 @@ def main():
     with open(os.path.join(OUT_DIR, "meta.json"), "w", encoding="utf-8") as fh:
         json.dump(meta_out, fh, indent=2, ensure_ascii=False)
 
-    gesamt = len(SYMBOLS) * len(SERIES)
+    gesamt = sum(len(series_fuer(name)) for name in SYMBOLS)
     print(f"\n{gesamt - failures} von {gesamt} Reihen geholt.")
     # Nur hart fehlschlagen, wenn gar nichts geklappt hat.
     if failures == gesamt:
