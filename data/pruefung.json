@@ -1,8 +1,8 @@
 {
- "geprueft_utc": "2026-09-21 13:27:24",
- "fehler": 13,
+ "geprueft_utc": "2026-09-21 13:48:36",
+ "fehler": 14,
  "hinweise": 0,
- "gesamt": 558,
+ "gesamt": 566,
  "bestanden": false,
  "erklaerung": "Jede Pruefung rechnet einen Wert aus levels.json unabhaengig aus den Roh-Bars nach. 'FEHLER' heisst: der Wert widerspricht den Bootcamp-Definitionen oder den Rohdaten und darf nicht als sichere Aussage verwendet werden.",
  "pruefungen": [
@@ -80,6 +80,18 @@
   },
   {
    "konzept": "nq level_status london_low",
+   "quelle": "Tag 3",
+   "status": "OK",
+   "text": "unberuehrt bestaetigt"
+  },
+  {
+   "konzept": "nq level_status ny_am_high",
+   "quelle": "Tag 3",
+   "status": "OK",
+   "text": "unberuehrt bestaetigt"
+  },
+  {
+   "konzept": "nq level_status ny_am_low",
    "quelle": "Tag 3",
    "status": "OK",
    "text": "unberuehrt bestaetigt"
@@ -514,7 +526,7 @@
    "konzept": "nq range_ote",
    "quelle": "Tag 11",
    "status": "OK",
-   "text": "Range 29659.25-30130.5: EQ, OTE 0,62-0,79 und Golden Pocket stimmen"
+   "text": "Range 30063.5-30275.0: EQ, OTE 0,62-0,79 und Golden Pocket stimmen"
   },
   {
    "konzept": "nq range_ote_1h",
@@ -538,7 +550,7 @@
    "konzept": "nq range_ote Ansatz",
    "quelle": "Tag 11",
    "status": "OK",
-   "text": "29659.25-30130.5: beide Enden Swing Points, keine Verletzung innerhalb der Range, noch nicht rebalanced"
+   "text": "30063.5-30275.0: beide Enden Swing Points, keine Verletzung innerhalb der Range, noch nicht rebalanced"
   },
   {
    "konzept": "nq range_ote_1h Ansatz",
@@ -601,12 +613,6 @@
    "text": "noch nicht gesweept, Bezeichnung passt"
   },
   {
-   "konzept": "nq RB bullish 29659.25-29699.75",
-   "quelle": "Tag 12",
-   "status": "OK",
-   "text": "Wick am Level, Body diesseits, Gegen-Close vorhanden"
-  },
-  {
    "konzept": "nq RB bearish 29832.25-29852.25",
    "quelle": "Tag 12",
    "status": "OK",
@@ -637,10 +643,22 @@
    "text": "Wick am Level, Body diesseits, Gegen-Close vorhanden"
   },
   {
+   "konzept": "nq RB bullish 30202.25-30221.5",
+   "quelle": "Tag 12",
+   "status": "OK",
+   "text": "Wick am Level, Body diesseits, Gegen-Close vorhanden"
+  },
+  {
    "konzept": "nq NWOG 29917.25-29946.5",
    "quelle": "Tag 20",
    "status": "OK",
    "text": "'gefuellt': False stimmt mit den Bars ueberein"
+  },
+  {
+   "konzept": "nq fvg_15m 29768.75-29773.25",
+   "quelle": "Tag 22",
+   "status": "OK",
+   "text": "Sponsor '1d-FVG 28736.0-28952.0' ist eine zulaessige HTF-Quelle"
   },
   {
    "konzept": "nq fvg_5m 29764.75-29771.25",
@@ -772,7 +790,7 @@
    "konzept": "nq trend_30m",
    "quelle": "Tag 3",
    "status": "OK",
-   "text": "bullish, tragender Swing 30216.0 ist unberuehrt"
+   "text": "bullish, tragender Swing 30216.0 ist sweep"
   },
   {
    "konzept": "nq struktur_1d MSS 29364.75",
@@ -859,16 +877,22 @@
    "text": "Body Close um 09-18 15:30 belegt, Richtung passt zu 'bearish'"
   },
   {
+   "konzept": "nq Stacked PO3 09:30",
+   "quelle": "Tag 23",
+   "status": "OK",
+   "text": "Manipulation=True stimmt mit den 15m-Bars ueberein"
+  },
+  {
    "konzept": "nq VWAP",
    "quelle": "Tag 28",
    "status": "OK",
-   "text": "30158.45 liegt in der Tagesspanne 30018.0-30275.0"
+   "text": "30170.55 liegt in der Tagesspanne 30018.0-30275.0"
   },
   {
    "konzept": "nq market_condition",
    "quelle": "Tag 22",
    "status": "OK",
-   "text": "16 FVGs in 60 Bars nachgerechnet"
+   "text": "15 FVGs in 60 Bars nachgerechnet"
   },
   {
    "konzept": "es pdh",
@@ -938,6 +962,18 @@
   },
   {
    "konzept": "es level_status london_low",
+   "quelle": "Tag 3",
+   "status": "OK",
+   "text": "unberuehrt bestaetigt"
+  },
+  {
+   "konzept": "es level_status ny_am_high",
+   "quelle": "Tag 3",
+   "status": "OK",
+   "text": "unberuehrt bestaetigt"
+  },
+  {
+   "konzept": "es level_status ny_am_low",
    "quelle": "Tag 3",
    "status": "OK",
    "text": "unberuehrt bestaetigt"
@@ -1121,6 +1157,12 @@
    "quelle": "Tag 9",
    "status": "OK",
    "text": "3-Kerzen-Sequenz in den Bars belegt"
+  },
+  {
+   "konzept": "es fvg_1h 7759.0-7759.25",
+   "quelle": "Tag 10",
+   "status": "FEHLER",
+   "text": "als unmediated gemeldet, wurde aber bereits angetappt"
   },
   {
    "konzept": "es fvg_30m 7632.5-7635.75",
@@ -1453,12 +1495,6 @@
    "text": "unten praktisch wicklos (0.25 Punkte)"
   },
   {
-   "konzept": "es RB bullish 7686.25-7690.0",
-   "quelle": "Tag 12",
-   "status": "OK",
-   "text": "Wick am Level, Body diesseits, Gegen-Close vorhanden"
-  },
-  {
    "konzept": "es RB bullish 7731.25-7733.0",
    "quelle": "Tag 12",
    "status": "OK",
@@ -1489,6 +1525,12 @@
    "text": "Wick am Level, Body diesseits, Gegen-Close vorhanden"
   },
   {
+   "konzept": "es RB bearish 7761.5-7764.5",
+   "quelle": "Tag 12",
+   "status": "OK",
+   "text": "Wick am Level, Body diesseits, Gegen-Close vorhanden"
+  },
+  {
    "konzept": "es NWOG 7712.5-7721.75",
    "quelle": "Tag 20",
    "status": "OK",
@@ -1498,7 +1540,7 @@
    "konzept": "es fvg_15m 7632.5-7634.75",
    "quelle": "Tag 22",
    "status": "OK",
-   "text": "Sponsor '1d-FVG 7498.0-7542.75' ist eine zulaessige HTF-Quelle"
+   "text": "Sponsor '1d-FVG 7541.0-7629.0' ist eine zulaessige HTF-Quelle"
   },
   {
    "konzept": "es fvg_15m 7640.0-7645.0",
@@ -1735,10 +1777,16 @@
    "text": "Body Close um 09-21 02:00 belegt, Richtung passt zu 'bullish'"
   },
   {
+   "konzept": "es Stacked PO3 09:30",
+   "quelle": "Tag 23",
+   "status": "OK",
+   "text": "Manipulation=True stimmt mit den 15m-Bars ueberein"
+  },
+  {
    "konzept": "es VWAP",
    "quelle": "Tag 28",
    "status": "OK",
-   "text": "7755.59 liegt in der Tagesspanne 7730.75-7771.25"
+   "text": "7756.52 liegt in der Tagesspanne 7730.75-7771.25"
   },
   {
    "konzept": "es market_condition",
@@ -2083,12 +2131,6 @@
    "text": "3-Kerzen-Sequenz in den Bars belegt"
   },
   {
-   "konzept": "xau fvg_15m 4422.6-4427.6",
-   "quelle": "Tag 9",
-   "status": "OK",
-   "text": "3-Kerzen-Sequenz in den Bars belegt"
-  },
-  {
    "konzept": "xau fvg_15m 4409.0-4412.9",
    "quelle": "Tag 9",
    "status": "OK",
@@ -2125,7 +2167,7 @@
    "text": "3-Kerzen-Sequenz in den Bars belegt"
   },
   {
-   "konzept": "xau fvg_5m 4326.5-4330.9",
+   "konzept": "xau fvg_15m 4393.0-4402.6",
    "quelle": "Tag 9",
    "status": "OK",
    "text": "3-Kerzen-Sequenz in den Bars belegt"
@@ -2180,6 +2222,12 @@
   },
   {
    "konzept": "xau fvg_5m 4383.9-4386.1",
+   "quelle": "Tag 9",
+   "status": "OK",
+   "text": "3-Kerzen-Sequenz in den Bars belegt"
+  },
+  {
+   "konzept": "xau fvg_5m 4391.2-4401.1",
    "quelle": "Tag 9",
    "status": "OK",
    "text": "3-Kerzen-Sequenz in den Bars belegt"
@@ -2404,7 +2452,7 @@
    "konzept": "xau trend_30m.cisd_bearish",
    "quelle": "Tag 4",
    "status": "OK",
-   "text": "4380.2 ist die Body-Grenze der Swing-Kerze, Status stimmt"
+   "text": "4393.0 ist die Body-Grenze der Swing-Kerze, Status stimmt"
   },
   {
    "konzept": "xau trend_1d",
@@ -2428,7 +2476,7 @@
    "konzept": "xau trend_30m",
    "quelle": "Tag 3",
    "status": "OK",
-   "text": "bullish, tragender Swing 4379.5 ist unberuehrt"
+   "text": "bullish, tragender Swing 4388.7 ist unberuehrt"
   },
   {
    "konzept": "xau struktur_1d BOS 2772.6",
@@ -2530,7 +2578,7 @@
    "konzept": "xau VWAP",
    "quelle": "Tag 28",
    "status": "OK",
-   "text": "4396.2 liegt in der Tagesspanne 4377.5-4422.1"
+   "text": "4396.35 liegt in der Tagesspanne 4377.5-4422.1"
   },
   {
    "konzept": "xau market_condition",
@@ -2731,6 +2779,18 @@
    "text": "3-Kerzen-Sequenz in den Bars belegt"
   },
   {
+   "konzept": "btc fvg_1h 81131.5-81176.16",
+   "quelle": "Tag 9",
+   "status": "OK",
+   "text": "3-Kerzen-Sequenz in den Bars belegt"
+  },
+  {
+   "konzept": "btc fvg_1h 80498.6-81000.0",
+   "quelle": "Tag 9",
+   "status": "OK",
+   "text": "3-Kerzen-Sequenz in den Bars belegt"
+  },
+  {
    "konzept": "btc fvg_1h 80930.98-81048.05",
    "quelle": "Tag 9",
    "status": "OK",
@@ -2750,18 +2810,6 @@
   },
   {
    "konzept": "btc fvg_1h 84094.21-84113.61",
-   "quelle": "Tag 9",
-   "status": "OK",
-   "text": "3-Kerzen-Sequenz in den Bars belegt"
-  },
-  {
-   "konzept": "btc fvg_1h 84781.4-84800.02",
-   "quelle": "Tag 9",
-   "status": "OK",
-   "text": "3-Kerzen-Sequenz in den Bars belegt"
-  },
-  {
-   "konzept": "btc fvg_1h 84896.0-84987.0",
    "quelle": "Tag 9",
    "status": "OK",
    "text": "3-Kerzen-Sequenz in den Bars belegt"
@@ -2809,6 +2857,12 @@
    "text": "3-Kerzen-Sequenz in den Bars belegt"
   },
   {
+   "konzept": "btc fvg_30m 84094.21-84321.63",
+   "quelle": "Tag 9",
+   "status": "OK",
+   "text": "3-Kerzen-Sequenz in den Bars belegt"
+  },
+  {
    "konzept": "btc fvg_30m 84440.35-84589.97",
    "quelle": "Tag 9",
    "status": "OK",
@@ -2821,7 +2875,7 @@
    "text": "3-Kerzen-Sequenz in den Bars belegt"
   },
   {
-   "konzept": "btc fvg_30m 84896.0-85026.72",
+   "konzept": "btc fvg_15m 78023.44-78074.1",
    "quelle": "Tag 9",
    "status": "OK",
    "text": "3-Kerzen-Sequenz in den Bars belegt"
@@ -2881,7 +2935,7 @@
    "text": "3-Kerzen-Sequenz in den Bars belegt"
   },
   {
-   "konzept": "btc fvg_15m 84896.0-84968.23",
+   "konzept": "btc fvg_5m 78881.4-79179.08",
    "quelle": "Tag 9",
    "status": "OK",
    "text": "3-Kerzen-Sequenz in den Bars belegt"
@@ -2936,12 +2990,6 @@
   },
   {
    "konzept": "btc fvg_5m 84433.71-84462.71",
-   "quelle": "Tag 9",
-   "status": "OK",
-   "text": "3-Kerzen-Sequenz in den Bars belegt"
-  },
-  {
-   "konzept": "btc fvg_5m 85062.03-85079.41",
    "quelle": "Tag 9",
    "status": "OK",
    "text": "3-Kerzen-Sequenz in den Bars belegt"
@@ -3115,6 +3163,12 @@
    "text": "Sponsor '1d-FVG 63313.0-63979.37' ist eine zulaessige HTF-Quelle"
   },
   {
+   "konzept": "btc fvg_5m 78881.4-79179.08",
+   "quelle": "Tag 22",
+   "status": "OK",
+   "text": "Sponsor '4h-FVG 76891.5-77193.07' ist eine zulaessige HTF-Quelle"
+  },
+  {
    "konzept": "btc fvg_5m 81319.56-81377.86",
    "quelle": "Tag 22",
    "status": "OK",
@@ -3167,12 +3221,6 @@
    "quelle": "Tag 22",
    "status": "OK",
    "text": "Sponsor '1d-FVG 77749.99-78627.58' ist eine zulaessige HTF-Quelle"
-  },
-  {
-   "konzept": "btc fvg_5m 85062.03-85079.41",
-   "quelle": "Tag 22",
-   "status": "OK",
-   "text": "Sponsor '1d-FVG 77076.9-80827.44' ist eine zulaessige HTF-Quelle"
   },
   {
    "konzept": "btc trend_1d.cisd_bullish",
@@ -3346,7 +3394,7 @@
    "konzept": "btc VWAP",
    "quelle": "Tag 28",
    "status": "OK",
-   "text": "83786.88 liegt in der Tagesspanne 80837.76-85411.53"
+   "text": "83853.65 liegt in der Tagesspanne 80837.76-85411.53"
   },
   {
    "konzept": "btc market_condition",
