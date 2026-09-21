@@ -51,6 +51,15 @@ DEVIL_MARK_TOLERANZ = 0.5
 HTF_FVG_FELDER = (("fvg_1d", "1d"), ("fvg_4h", "4h"),
                   ("fvg_1h", "1h"), ("fvg_30m", "30m"))
 
+# Fuer XAU/BTC baut analyse.py 1h/4h/1d nicht mehr aus den (auf 60 Tage
+# gedeckelten) 30m-Bars hoch, sondern aus einer eigenen, viel laenger
+# zurueckreichenden 1h-Serie (siehe fetch_data.py, SERIES_LANGE_1H_HISTORIE,
+# und analyse.py, htf_kerzen()). Der Pruefer muss dieselbe Quelle
+# nachrechnen - sonst vergleicht er gegen eine kuerzere Datenbasis, als
+# analyse.py tatsaechlich verwendet hat, und meldet FEHLER, wo keine sind.
+SYMBOLE_LANGE_HTF_HISTORIE = ("xau", "btc")
+MIN_1H_BARS_EIGENE_SERIE = 60
+
 
 # ============================================================ Rohdaten
 
@@ -162,6 +171,17 @@ def zu_1h(bars):
     if akt:
         out.append(akt)
     return out
+
+
+def eigene_1h_serie(sym):
+    """
+    Fuer XAU/BTC: die eigene, lang zurueckreichende 1h-Serie aus
+    "{sym}_1h.csv" (siehe fetch_data.py), statt aus den 30m-Bars
+    hochgerechnet. Leer, wenn die Datei fehlt oder zu kurz ist - dann greift
+    in pruefe_datei() derselbe 30m-Fallback wie bei NQ/ES.
+    """
+    bars = lade_bars(sym, "1h")
+    return bars if len(bars) >= MIN_1H_BARS_EIGENE_SERIE else []
 
 
 # ============================================================ Pruefgeruest
@@ -1390,11 +1410,12 @@ def pruefe_datei(pfad, symbole, b):
         if not bars30:
             b.hinweis(f"{sym}", "-", "keine 30m-Rohdaten vorhanden, uebersprungen")
             continue
+        b1h_lang = eigene_1h_serie(sym) if sym in SYMBOLE_LANGE_HTF_HISTORIE else []
         serien = {
             "30m": bars30,
-            "1h": zu_1h(bars30),
-            "4h": zu_stunden(bars30, 4),
-            "1d": zu_tageskerzen(bars30),
+            "1h": b1h_lang or zu_1h(bars30),
+            "4h": zu_stunden(b1h_lang, 4) if b1h_lang else zu_stunden(bars30, 4),
+            "1d": zu_tageskerzen(b1h_lang) if b1h_lang else zu_tageskerzen(bars30),
             "15m": lade_bars(sym, "15m"),
             "5m": lade_bars(sym, "5m"),
         }
