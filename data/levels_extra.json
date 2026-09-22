@@ -1,6 +1,6 @@
 {
- "berechnet_utc": "2026-09-22 11:46:13",
- "datenstand_utc": "2026-09-22 11:43:36",
+ "berechnet_utc": "2026-09-22 12:06:16",
+ "datenstand_utc": "2026-09-22 12:03:35",
  "hinweis": "XAUUSD und BTCUSD fuer die taegliche Frueh-Uebersicht. Fuer beide gibt es bewusst KEIN SMT und keine True Manipulation - es ist kein korrelierendes Pair hinterlegt, und KEINE Asia-/London-/NY-AM-Sessions (dafuer 1h-Kerzen mit deutlich laengerer Historie als bei NQ/ES, siehe fvg_1d/fvg_4h/fvg_1h - dort faellt jetzt nichts mehr aus dem letzten Monat heraus). Tagesschnitt ist trotzdem derselbe wie bei den Futures (Handelstag 18:00 ET bis 17:00 ET); BTC handelt durchgehend, Samstag und Sonntag sind deshalb eigene Handelstage - PDH/PDL am Montag sind bei BTC also Sonntag-High/-Low, nicht Freitag.",
  "operationalisierungen": {
   "swing_spanne": "Ein Swing Point gilt als markant, wenn er das Extrem einer Formation aus 2 Bars links und rechts ist (bei der Fib-Range 3 Bars, weil eine Range groebere Swings braucht als eine Liquiditaets-Reihe). Tag 3 sagt nur 'nur markante Swing Points, der Rest ist Noise' und nennt keine Zahl.",
@@ -15,8 +15,8 @@
   "devil_mark_nur_index": "Devil Marks werden nur fuer NQ und ES berechnet, mit 0,5 Punkten absoluter Toleranz. Tag 20 nennt die Toleranz absolut und sagt sie am NQ; das Bootcamp handelt ausschliesslich Index-Futures. Fuer XAU und BTC wird das Konzept deshalb gar nicht ausgegeben, statt eine Schwelle zu erfinden, die dort nicht gedeckt ist."
  },
  "xau": {
-  "preis": 4351.1,
-  "letzte_bar_et": "2026-09-22 07:35",
+  "preis": 4355.9,
+  "letzte_bar_et": "2026-09-22 07:55",
   "handelstag": "2026-09-22",
   "key_levels": {
    "pdh": 4422.1,
@@ -60,7 +60,7 @@
    "high": 4414.1,
    "low": 4327.6,
    "open": 4382.5,
-   "close": 4351.1
+   "close": 4355.9
   },
   "heute_high_zeit_et": "09-21 20:00",
   "heute_low_zeit_et": "09-22 04:30",
@@ -338,7 +338,7 @@
    "ote_von": 4387.93,
    "ote_bis": 4404.47,
    "golden_pocket": 4396.2,
-   "preis_bei_prozent": 25.9,
+   "preis_bei_prozent": 32.2,
    "preis_in": "discount",
    "start_et": "09-18 16:30",
    "extrem_et": "09-22 04:30",
@@ -372,7 +372,7 @@
    "ote_von": 4394.31,
    "ote_bis": 4412.6,
    "golden_pocket": 4403.46,
-   "preis_bei_prozent": 23.4,
+   "preis_bei_prozent": 29.1,
    "preis_in": "discount",
    "start_et": "09-18 13:00",
    "extrem_et": "09-22 04:00",
@@ -756,6 +756,15 @@
   "fvg_30m": [
    {
     "richtung": "bearish",
+    "von": 4386.3,
+    "bis": 4387.3,
+    "mitte": 4386.8,
+    "et": "09-21 05:30",
+    "unmediated": false,
+    "ifvg": true
+   },
+   {
+    "richtung": "bearish",
     "von": 4384.8,
     "bis": 4393.7,
     "mitte": 4389.25,
@@ -832,15 +841,6 @@
     "bis": 4365.2,
     "mitte": 4362.9,
     "et": "09-22 07:00",
-    "unmediated": true,
-    "ifvg": false
-   },
-   {
-    "richtung": "bearish",
-    "von": 4356.8,
-    "bis": 4359.0,
-    "mitte": 4357.9,
-    "et": "09-22 07:30",
     "unmediated": true,
     "ifvg": false
    }
@@ -1052,7 +1052,7 @@
     "bis": 4359.0,
     "mitte": 4357.9,
     "et": "09-22 07:05",
-    "unmediated": true,
+    "unmediated": false,
     "ifvg": false,
     "gesponsort": false,
     "sponsor": null
@@ -1230,14 +1230,6 @@
   "rejection_blocks_30m": [
    {
     "richtung": "bullish",
-    "level": "4h-FVG 4380.7-4392.7 (Oberkante)",
-    "von": 4385.9,
-    "bis": 4395.8,
-    "mitte": 4390.85,
-    "et": "09-21 20:30"
-   },
-   {
-    "richtung": "bullish",
     "level": "4h-FVG 4380.7-4392.7 (Unterkante)",
     "von": 4376.3,
     "bis": 4386.2,
@@ -1275,6 +1267,14 @@
     "bis": 4348.3,
     "mitte": 4342.75,
     "et": "09-22 04:00"
+   },
+   {
+    "richtung": "bullish",
+    "level": "30m-FVG 4348.3-4351.3 (Oberkante)",
+    "von": 4346.3,
+    "bis": 4355.1,
+    "mitte": 4350.7,
+    "et": "09-22 07:00"
    }
   ],
   "devil_marks_30m": null,
@@ -1313,16 +1313,16 @@
     "datum": "2026-09-22"
    }
   ],
-  "vwap": 4365.17,
+  "vwap": 4365.03,
   "market_condition": {
-   "fvgs_letzte_60_bars": 12,
+   "fvgs_letzte_60_bars": 11,
    "bewertung": "gut"
   },
   "data_levels": []
  },
  "btc": {
-  "preis": 86099.11,
-  "letzte_bar_et": "2026-09-22 07:46",
+  "preis": 85954.67,
+  "letzte_bar_et": "2026-09-22 08:06",
   "handelstag": "2026-09-22",
   "key_levels": {
    "pdh": 87394.0,
@@ -1367,7 +1367,7 @@
    "high": 86725.3,
    "low": 85085.28,
    "open": 86557.3,
-   "close": 86099.11
+   "close": 85954.67
   },
   "heute_high_zeit_et": "09-21 18:00",
   "heute_low_zeit_et": "09-22 01:30",
@@ -1647,7 +1647,7 @@
    "ote_von": 86593.78,
    "ote_bis": 86951.77,
    "golden_pocket": 86772.77,
-   "preis_bei_prozent": 38.6,
+   "preis_bei_prozent": 30.1,
    "preis_in": "discount",
    "start_et": "09-21 16:00",
    "extrem_et": "09-21 23:00",
@@ -1681,7 +1681,7 @@
    "ote_von": 82031.02,
    "ote_bis": 83185.08,
    "golden_pocket": 82608.05,
-   "preis_bei_prozent": 80.9,
+   "preis_bei_prozent": 78.3,
    "preis_in": "premium",
    "start_et": "09-20 17:00",
    "extrem_et": "09-21 16:00",
@@ -2365,8 +2365,8 @@
     "bis": 86036.68,
     "mitte": 85986.83,
     "et": "09-22 07:40",
-    "unmediated": true,
-    "ifvg": false,
+    "unmediated": false,
+    "ifvg": true,
     "gesponsort": true,
     "sponsor": "1d-FVG 78334.44-78553.19"
    }
@@ -2536,14 +2536,6 @@
   ],
   "rejection_blocks_30m": [
    {
-    "richtung": "bullish",
-    "level": "4h-FVG 85811.38-85814.13 (Oberkante)",
-    "von": 85814.13,
-    "bis": 85946.58,
-    "mitte": 85880.36,
-    "et": "09-21 14:30"
-   },
-   {
     "richtung": "bearish",
     "level": "30m-FVG 86842.66-86856.01 (Unterkante)",
     "von": 86608.24,
@@ -2582,6 +2574,14 @@
     "bis": 85559.03,
     "mitte": 85459.13,
     "et": "09-22 02:30"
+   },
+   {
+    "richtung": "bearish",
+    "level": "1h-FVG 86076.69-86532.15 (Unterkante)",
+    "von": 85969.07,
+    "bis": 86123.71,
+    "mitte": 86046.39,
+    "et": "09-22 07:30"
    }
   ],
   "devil_marks_30m": null,
@@ -2608,7 +2608,7 @@
     "datum": "2026-09-22"
    }
   ],
-  "vwap": 85706.99,
+  "vwap": 85709.01,
   "market_condition": {
    "fvgs_letzte_60_bars": 14,
    "bewertung": "gut"
@@ -2619,7 +2619,7 @@
   "open": 4382.5,
   "high": 4414.1,
   "low": 4327.6,
-  "aktuell": 4351.1,
+  "aktuell": 4355.9,
   "hoch_zeit_et": "09-21 20:00",
   "tief_zeit_et": "09-22 04:30",
   "form": "OHLC (bearische Manipulation zuerst nach oben)"
@@ -2628,7 +2628,7 @@
   "open": 86557.3,
   "high": 86725.3,
   "low": 85085.28,
-  "aktuell": 86099.11,
+  "aktuell": 85954.67,
   "hoch_zeit_et": "09-21 18:00",
   "tief_zeit_et": "09-22 01:30",
   "form": "OHLC (bearische Manipulation zuerst nach oben)"
