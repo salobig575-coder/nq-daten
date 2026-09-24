@@ -19,6 +19,11 @@ jobs:
         run: |
           python3 - <<'EOF' >> "$GITHUB_OUTPUT"
           import json, datetime
+          from zoneinfo import ZoneInfo
+
+          def zeile(text):
+              # Eine Zeile pro Ausgabe (GITHUB_OUTPUT), keine Zeilenumbrueche.
+              return " ".join(str(text).split())
 
           # --- 1) Ist levels.json ueberhaupt frisch berechnet worden? ---
           try:
@@ -29,30 +34,43 @@ jobs:
               alter_min = (datetime.datetime.now(datetime.timezone.utc) - berechnet).total_seconds() / 60
               if alter_min > 30:
                   print("stale=true")
-                  print(f"grund=levels.json ist {alter_min:.0f} Minuten alt (berechnet_utc: {data['berechnet_utc']} UTC)")
+                  et = berechnet.astimezone(ZoneInfo("America/New_York")).strftime("%Y-%m-%d %H:%M")
+                  print(zeile(f"grund=levels.json ist {alter_min:.0f} Minuten alt (zuletzt berechnet {et} ET)"))
               else:
                   print("stale=false")
           except Exception as e:
               data = None
               print("stale=true")
-              print(f"grund=levels.json konnte nicht gelesen werden: {e}")
+              print(zeile(f"grund=levels.json konnte nicht gelesen werden: {e}"))
 
           # --- 2) Selbst wenn frisch berechnet: hat fetch_data.py fuer NQ/ES
-          #        trotzdem eine Serie NICHT aktualisieren koennen? Das faellt
+          #        (und fuer XAU/BTC in levels_extra.json) trotzdem eine Serie
+          #        NICHT aktualisieren koennen? Das faellt
           #        an berechnet_utc allein nie auf, weil analyse.py auch mit
           #        alten Bars "erfolgreich" durchlaeuft. ---
           qualitaet_probleme = []
-          if data:
-              for symbol in ("nq", "es"):
-                  eintrag = data.get(symbol) or {}
-                  warnung = eintrag.get("fetch_warnung")
-                  if warnung:
-                      serien = ", ".join(warnung.get("fehlgeschlagene_serien", []))
-                      qualitaet_probleme.append(f"{symbol}: {serien}")
+          dateien = [("data/levels.json", ("nq", "es")), ("data/levels_extra.json", ("xau", "btc"))]
+          for pfad, symbole in dateien:
+              try:
+                  with open(pfad) as f:
+                      inhalt = json.load(f)
+              except Exception as e:
+                  qualitaet_probleme.append(f"{pfad} nicht lesbar: {e}")
+                  continue
+              for symbol in symbole:
+                  eintrag = inhalt.get(symbol) or {}
+                  if "fehler" in eintrag:
+                      qualitaet_probleme.append(f"{symbol}: Auswertung fehlgeschlagen ({eintrag['fehler']})")
+                      continue
+                  # Nur echte Abruf-Ausfaelle zaehlen. "fehlende_kerzen" (einzelne
+                  # Kerzen, die Yahoo nie liefert) ist ein Hinweis, kein Ausfall.
+                  serien = (eintrag.get("fetch_warnung") or {}).get("fehlgeschlagene_serien") or []
+                  if serien:
+                      qualitaet_probleme.append(f"{symbol}: {', '.join(serien)}")
           if qualitaet_probleme:
               print("qualitaet=true")
               grund2 = "Datenabruf teilweise fehlgeschlagen, alte Bars in Benutzung -> " + " | ".join(qualitaet_probleme)
-              print(f"qualitaet_grund={grund2}")
+              print(zeile(f"qualitaet_grund={grund2}"))
           else:
               print("qualitaet=false")
           EOF
@@ -60,9 +78,13 @@ jobs:
       - name: Issue öffnen bei Stillstand
         if: steps.check.outputs.stale == 'true'
         uses: actions/github-script@v7
+        env:
+          GRUND: ${{ steps.check.outputs.grund }}
         with:
           script: |
-            const grund = `${{ steps.check.outputs.grund }}`;
+            // Text ueber eine Umgebungsvariable, nicht direkt ins Skript
+            // eingesetzt - sonst koennte ein Backtick im Fehlertext es brechen.
+            const grund = process.env.GRUND || "";
             const { data: issues } = await github.rest.issues.listForRepo({
               owner: context.repo.owner, repo: context.repo.repo,
               state: "open", labels: "datenausfall"
@@ -96,12 +118,14 @@ jobs:
               });
             }
 
-      - name: Issue öffnen bei teilweisem Datenausfall (NQ/ES veraltet)
+      - name: Issue öffnen bei teilweisem Datenausfall
         if: steps.check.outputs.qualitaet == 'true'
         uses: actions/github-script@v7
+        env:
+          GRUND: ${{ steps.check.outputs.qualitaet_grund }}
         with:
           script: |
-            const grund = `${{ steps.check.outputs.qualitaet_grund }}`;
+            const grund = process.env.GRUND || "";
             const { data: issues } = await github.rest.issues.listForRepo({
               owner: context.repo.owner, repo: context.repo.repo,
               state: "open", labels: "datenqualitaet"
@@ -109,7 +133,7 @@ jobs:
             if (issues.length === 0) {
               await github.rest.issues.create({
                 owner: context.repo.owner, repo: context.repo.repo,
-                title: "⚠️ nq-daten: NQ/ES laufen mit veralteten Bars",
+                title: "⚠️ nq-daten: Kursreihen laufen mit veralteten Bars",
                 body: grund, labels: ["datenqualitaet"]
               });
             }
@@ -127,7 +151,7 @@ jobs:
               await github.rest.issues.createComment({
                 owner: context.repo.owner, repo: context.repo.repo,
                 issue_number: issue.number,
-                body: "NQ/ES laufen wieder mit frischen Daten — Issue wird automatisch geschlossen."
+                body: "Alle Kursreihen laufen wieder mit frischen Daten — Issue wird automatisch geschlossen."
               });
               await github.rest.issues.update({
                 owner: context.repo.owner, repo: context.repo.repo,
