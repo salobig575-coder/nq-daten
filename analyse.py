@@ -26,6 +26,10 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 ET = ZoneInfo("America/New_York")
+# Zeitstempel IMMER mit Jahr: ohne Jahr sortieren Ereignisse ueber den
+# Jahreswechsel falsch (Dezember landet hinter Januar), und bei XAU/BTC mit
+# mehrjaehriger Historie sind Eintraege sonst nicht eindeutig zuzuordnen.
+ZF = "%Y-%m-%d %H:%M"
 HERE = os.path.dirname(os.path.abspath(__file__))
 DATA = os.path.join(HERE, "data")
 
@@ -40,6 +44,8 @@ SPONSOR_RUECKBLICK = 60
 RB_WICK_ANTEIL = 0.5
 # Fenster nach einer roten News, in dem das Data High/Low gesucht wird.
 DATA_FENSTER_MIN = 30
+# Operationalisierung zu Tag 10 ("knapper Body Close zaehlt nicht"), siehe Register.
+IFVG_KNAPP_ANTEIL = 0.10
 
 # ============================================================================
 # Register der Operationalisierungen
@@ -58,8 +64,9 @@ DATA_FENSTER_MIN = 30
 # Devil-Mark-Toleranz 0,5 Punkte absolut (Tag 20), Sponsor mindestens 30
 # Minuten (Tag 22).
 #
-# ACHTUNG - das Bootcamp widerspricht sich an zwei Stellen selbst. Beide
-# stehen in der Skill "prayn-bootcamp-konzepte" unter W1/W2 und sind
+# ACHTUNG - das Bootcamp widerspricht sich an mehreren Stellen selbst bzw.
+# laesst sie offen. Sie stehen in der Skill "prayn-bootcamp-konzepte" unter
+# W1-W9 und sind
 # deshalb KEINE woertlichen Regeln, sondern Festlegungen dieses Systems:
 #
 #   W1  Was ist "High Timeframe"? Tag 27 und Tag 12 sagen "alles UEBER 30
@@ -139,6 +146,87 @@ OPERATIONALISIERUNGEN = {
         "und BTC wird das Konzept deshalb gar nicht ausgegeben, statt eine "
         "Schwelle zu erfinden, die dort nicht gedeckt ist."
     ),
+    "manipulations_leg": (
+        "Das 'Manipulations-Leg des Tages' ist die Strecke vom Tages-Open (18:00 ET) "
+        "bis zu dem Extrem, das zuerst gedruckt wurde. Tag 23 beschreibt PO3 an "
+        "15m- bis 4h-Kerzen; die Anwendung auf die Tageskerze ist eine Festlegung "
+        "dieses Systems. Das Leg haengt vom Zeitpunkt ab: um 08:45 ET kann es ein "
+        "anderes sein als nach NY Close. Ein FVG-Tap zaehlt nur, wenn das FVG "
+        "jenseits des Opens liegt (Bewegung hinein, nicht Start darin). Fehlt die "
+        "erste Kerze um 18:00 ET, steht start_unsicher."
+    ),
+    "daily_profile": (
+        "Daily Profile (Tag 19) wird so bestimmt: als 'getappt' zaehlen nur Levels "
+        "und HTF-FVGs, die vor London (02:00 ET) existierten; Profil 1 nur, wenn "
+        "London weder ein HTF Key Level getappt noch das Asia High/Low gesweept hat "
+        "(Tag 19: Accumulation = keine Liquidity genommen); Profil 2 nur, wenn London "
+        "zusaetzlich das bisherige Tageshoch oder -tief gebildet hat, sonst 'offen'. "
+        "Profil 1 und 3 sind vor NY AM vorlaeufig. Systemfestlegung, keine "
+        "woertliche Bootcamp-Regel."
+    ),
+    "stacked_po3": (
+        "Stacked PO3 (Tag 23) wird an den ersten sechs 15m-Kerzen ab 09:30 ET "
+        "gemessen. Eine Kerze 'manipuliert', wenn sie ein Level oder HTF-FVG neu "
+        "erreicht, das vor ihr existierte und nicht per Body Close gebrochen war; "
+        "stand die Kerze davor schon dort, zaehlt es nicht. Systemfestlegung."
+    ),
+    "true_manipulation_zeitfenster": (
+        "True Manipulation nur, wenn beide Pairs im Manipulations-Leg desselben "
+        "Tages manipuliert haben (Festlegung mit Salzmir, 23.09.2026). Als Tap "
+        "zaehlt nur ein HTF-FVG, das zu Leg-Beginn schon existierte und bis "
+        "Leg-Ende nicht invertiert war; als Sweep nur ein Level, das schon "
+        "zu Leg-Beginn existierte und im Leg nicht mit Body Close gebrochen wurde. Tag 24 sagt "
+        "nur 'an einem Punkt, an dem eine Distribution/ein Reversal erwartet werden kann'."
+    ),
+    "smt_timeframe": (
+        "SMT wird auf 5m-Kerzen gemessen (status_5m). Tag 13 nennt keine "
+        "Timeframe, sagt aber, SMTs treten auf 5m am haeufigsten auf "
+        "(Festlegung mit Salzmir, 23.09.2026)."
+    ),
+    "ifvg_knapp": (
+        f"Jeder Body Close jenseits des ganzen Gaps macht ein IFVG. Liegt der Close "
+        f"weniger als {IFVG_KNAPP_ANTEIL:.0%} der Gap-Breite jenseits, steht "
+        "ifvg_knapp=true. Tag 10 sagt nur 'knapper Body Close (zu knapp, zaehlt "
+        "nicht)' ohne Zahl (Festlegung mit Salzmir, 23.09.2026: jeder Close "
+        "zaehlt, knappe markieren)."
+    ),
+    "nwog_methode": (
+        "NWOG/NDOG = Luecke zwischen dem letzten Close vor der Pause und dem Open "
+        "um 18:00 ET danach, nur wenn Close != Open. Tag 20 nennt 'High und Low "
+        "der Sprung-Candle' bzw. den ICT-NWOG-Indikator (Festlegung mit Salzmir, "
+        "23.09.2026). NWOG = Pause ueber ein Wochenende, auch mit Feiertag."
+    ),
+    "range_nachziehen": (
+        "Ist der Preis ueber das Extrem einer Range hinausgelaufen, wird die "
+        "Range bis zum neuen Extrem nachgezogen, auch wenn es noch kein "
+        "bestaetigter Swing ist (extrem_unbestaetigt=true). Tag 11 regelt den "
+        "Fall nicht (Festlegung mit Salzmir, 23.09.2026)."
+    ),
+    "luecken": (
+        "Fehlen bei Yahoo innerhalb der Handelszeit Kerzen (Abstand ueber dem "
+        "Intervall, unter 3 Stunden, nicht die Pause 17-18 ET), wird ueber diese "
+        "Luecke kein FVG gebildet."
+    ),
+    "roll_erkennung": (
+        "Kontraktwechsel NQ/ES: Kerze im Roll-Fenster (14 Tage vor bis zum dritten "
+        "Freitag im Maerz/Juni/September/Dezember), in der NQ und ES gleichzeitig "
+        "und gleichgerichtet um mindestens 0,6 % und das 6-fache ihrer ueblichen "
+        "Kerzenbewegung springen und nicht zurueckkommen. Roll-Differenz = Close "
+        "minus Open dieser Kerze (auf 5m bis auf wenige Punkte genau, auf 1h "
+        "grober). Alle Preise davor werden um die Differenz verschoben "
+        "(Back-Adjustment wie im Chart). Siehe Feld rolls."
+    ),
+    "htf_fvg_reichweite": (
+        "fvg_1d und fvg_4h ueber die ganze 1h-Historie (bis 730 Tage), fvg_1h "
+        "ueber 90 Tage, fvg_30m ueber 10 Tage, fvg_15m ueber 600 und fvg_5m ueber "
+        "900 Kerzen. Alle unmediated FVGs bleiben drin, von den mediated nur die "
+        "10 juengsten."
+    ),
+    "kerzenbasis": (
+        "Body Close (Bruch, IFVG, FVG-Bildung, Swing Points) nur auf geschlossenen "
+        "Kerzen (Tag 3). Wick/Tap/Sweep (mediated, EQH/EQL gesweept, Level-Sweep) "
+        "zaehlt auch in der laufenden Kerze - ein Wick ist sofort passiert."
+    ),
 }
 
 # Symbole, fuer die Devil Marks nach Tag 20 ueberhaupt definiert sind (W3).
@@ -156,98 +244,21 @@ DEVIL_MARK_TOLERANZ = 0.5
 SYMBOLE_OHNE_SESSIONS = ("xau", "btc")
 
 
-def getappte_htf_fvgs(symbol_daten, hoch, tief):
-    """
-    Welche High-Timeframe-FVGs liegen im Fenster hoch/tief?
-
-    Tag 12 definiert "High Timeframe Key Level" ausdruecklich als alle
-    Liquidity Pools PLUS High-Timeframe-FVGs, "auch Daily/Weekly". Die
-    Untergrenze ist im Bootcamp nicht eindeutig - siehe W1 im Kopf dieser
-    Datei; dieses System nimmt ab 30m einschliesslich, deshalb genau diese
-    vier Felder.
-    """
-    getroffen = []
-    if hoch is None or tief is None:
-        return getroffen
-    for feld, tf in (("fvg_1d", "1d"), ("fvg_4h", "4h"),
-                     ("fvg_1h", "1h"), ("fvg_30m", "30m")):
-        for f in symbol_daten.get(feld) or []:
-            von, bis = f.get("von"), f.get("bis")
-            if von is None or bis is None:
-                continue
-            # Ueberlappung des Fensters mit der Zone = Tap
-            if tief <= bis and hoch >= von:
-                getroffen.append(f"{tf}-FVG {von}-{bis}")
-    return getroffen
-
-
-def manipulations_fenster(symbol_daten):
-    """
-    Das Preisfenster, in dem heute die Manipulation stattgefunden hat.
-
-    Tag 23 (PO3) beschreibt das genau: die Kerze oeffnet und manipuliert
-    ZUERST in eine Richtung, bevor sie in die Gegenrichtung distributed.
-    Bullisch OLHC (Open -> Low -> High -> Close), bearisch OHLC. Das
-    Manipulations-Leg ist also die Strecke vom Open bis zu dem Extrem, das
-    ZUERST gedruckt wurde.
-
-    Warum nicht einfach die ganze Tagesspanne: die deckt am Ende des Tages
-    fast jedes nahe HTF-FVG ab. Dann waere jeder Tag automatisch True
-    Manipulation, und die Aussage waere wertlos. Tag 24 meint ein konkretes
-    Manipulations-Ereignis, nicht "der Preis hat heute irgendwann mal ein Gap
-    beruehrt".
-
-    heute_high_zeit_et/heute_low_zeit_et sagen, welches Extrem zuerst kam -
-    dieselbe Quelle, aus der auch po3_form gebildet wird.
-    """
-    h = symbol_daten.get("heute_bisher") or {}
-    open_ = h.get("open")
-    hoch, tief = h.get("high"), h.get("low")
-    if open_ is None or hoch is None or tief is None:
-        return None, None
-
-    hoch_zeit = symbol_daten.get("heute_high_zeit_et")
-    tief_zeit = symbol_daten.get("heute_low_zeit_et")
-    if not hoch_zeit or not tief_zeit:
-        return None, None
-
-    # Welches Extrem kam zuerst? Das ist das Manipulations-Extrem (Tag 23).
-    manip = tief if tief_zeit < hoch_zeit else hoch
-    return max(open_, manip), min(open_, manip)
-
-
-def manipulation_belege(symbol_daten, hoch, tief, pool_namen):
-    """
-    Die EINE Manipulations-Definition des Systems (Tag 19, Querschnitt 26).
-
-    Tag 19 woertlich: "Manipulation: Bewegung in ein High-Timeframe-Key-Level
-    bzw. Liquidity Sweep." Es zaehlt also BEIDES, nicht nur der Sweep.
-
-    Vorher war dieselbe Frage an zwei Stellen unterschiedlich beantwortet:
-    daily_profile() pruefte benannte Key Levels UND HTF-FVGs, smt_vergleich()
-    dagegen nur Sweeps benannter Key Levels. Ein True-Manipulation-Fall, in
-    dem beide Pairs sauber in ein 4h-FVG getappt haben, fiel damit komplett
-    durch. Beide rufen jetzt diese Funktion auf.
-
-    pool_namen sind die Liquidity Pools, die im betrachteten Fenster
-    nachweislich manipuliert wurden. Die muss der Aufrufer bestimmen, weil
-    "beruehrt" je nach Fenster etwas anderes heisst:
-      - daily_profile: Levels, die VOR London schon existierten und in der
-        London-Range liegen. Die London-Levels selbst sind ausgeschlossen -
-        sie entstehen erst in diesem Fenster und liegen trivialerweise darin.
-      - smt_vergleich: Levels mit level_status "sweep" (Tag 3: nur Wick
-        jenseits = Ablehnung). Dort sorgt ab_wann() bereits dafuer, dass ein
-        Session-Level nicht vor seiner Session als gebrochen gilt.
-
-    hoch/tief spannen das Fenster fuer die FVG-Taps auf.
-    """
-    return list(pool_namen) + getappte_htf_fvgs(symbol_daten, hoch, tief)
-
-
 # ============================================================ Einlesen
 
-def lade(pfad):
-    bars = []
+# Raster je Serie in Minuten. Yahoo haengt an jede Serie eine Pseudo-Kerze an
+# (Zeitstempel = letzter Tick, z.B. "15:10" bei 30m, O=H=L=C, Volumen 0) und
+# liefert Zeitstempel teils doppelt. Eine Kerze, deren Start nicht auf dem
+# Raster liegt, ist keine Kerze. Sie wird verworfen - ihr Zeitstempel sagt aber,
+# bis wann ueberhaupt Daten vorliegen (DATENENDE). Nur daran laesst sich
+# entscheiden, ob die letzte echte Kerze schon geschlossen ist (Tag 3).
+RASTER_MIN = {"5m": 5, "15m": 15, "30m": 30, "1h": 60}
+DATENENDE = {}   # (name, suffix) -> Zeitpunkt des letzten Ticks (UTC)
+LUECKEN = {}     # (name, suffix) -> Liste fehlender Kerzen-Zeitpunkte (R7)
+
+
+def lade(pfad, suffix=None, schluessel=None):
+    roh = []
     with open(pfad, encoding="utf-8") as fh:
         next(fh)
         for line in fh:
@@ -255,7 +266,7 @@ def lade(pfad):
             if len(t) < 5:
                 continue
             ts = datetime.strptime(t[0], "%Y-%m-%d %H:%M").replace(tzinfo=timezone.utc)
-            bars.append(
+            roh.append(
                 {
                     "t": ts,
                     "et": ts.astimezone(ET),
@@ -266,35 +277,250 @@ def lade(pfad):
                     "v": float(t[5]) if len(t) > 5 else 0.0,
                 }
             )
-    bars.sort(key=lambda b: b["t"])
+    roh.sort(key=lambda b: b["t"])
+    raster = RASTER_MIN.get(suffix)
+    if not raster:
+        return roh
+    bars, gesehen, letzter_tick = [], set(), None
+    for b in roh:
+        minute_des_tages = b["t"].hour * 60 + b["t"].minute
+        if minute_des_tages % raster != 0:
+            # Pseudo-Kerze: nur ihr Zeitpunkt zaehlt (letzter Tick)
+            letzter_tick = max(letzter_tick or b["t"], b["t"])
+            continue
+        if b["t"] in gesehen:
+            continue
+        gesehen.add(b["t"])
+        bars.append(b)
+    if schluessel is not None:
+        DATENENDE[schluessel] = letzter_tick
     return bars
 
 
 def vielleicht_laden(name, suffix):
     try:
-        return lade(os.path.join(DATA, f"{name}_{suffix}.csv"))
+        return lade(os.path.join(DATA, f"{name}_{suffix}.csv"), suffix, (name, suffix))
     except (FileNotFoundError, StopIteration):
         return []
 
 
-# Serien, die auswerten() tatsaechlich einliest. Fuer nq/es wird 1h/1d von
-# fetch_data.py zwar geholt, aber hier nie gelesen - 1h/4h/1d werden aus 30m
-# resampled. Fuer xau/btc kommt "1h" dazu (siehe htf_kerzen()): daraus werden
-# jetzt auch 4h und die Tageskerze gebaut, mit viel laengerer Reichweite als
-# die auf 60 Tage gedeckelten 30m-Bars es erlauben wuerden.
-GENUTZTE_SUFFIXE = ("5m", "15m", "30m")
-SYMBOLE_MIT_1H_SUFFIX = ("xau", "btc")
+def datenende(name, suffix, stand_utc):
+    """Bis wann liegen fuer diese Serie wirklich Daten vor? Der letzte Tick
+    (aus der Pseudo-Kerze), hoechstens aber der Abrufzeitpunkt."""
+    tick = DATENENDE.get((name, suffix))
+    if tick is None:
+        return stand_utc
+    if stand_utc is None:
+        return tick
+    return min(tick, stand_utc)
+
+
+def ist_luecke(a, b, minuten):
+    """
+    Fehlen zwischen zwei aufeinanderfolgenden Kerzen Kerzen, OBWOHL gehandelt
+    wurde? Yahoo laesst gelegentlich einzelne Kerzen aus. Ueber so eine Luecke
+    hinweg entstehen Schein-FVGs. Normale Handelspausen (17:00-18:00 ET,
+    Wochenende, Feiertage) sind keine Luecke: dort zeigt auch sein Chart die
+    Kerzen direkt nebeneinander. Operationalisierung: eine Luecke ist ein
+    Abstand ueber dem Intervall, aber unter 3 Stunden, der nicht die
+    CME-Pause 17:00-18:00 ET enthaelt.
+    """
+    diff = (b["t"] - a["t"]).total_seconds() / 60
+    if diff <= minuten or diff >= 180:
+        return False
+    ende_a = a["et"] + timedelta(minutes=minuten)
+    pause_start = ende_a.replace(hour=17, minute=0, second=0, microsecond=0)
+    if ende_a <= pause_start and b["et"] >= pause_start + timedelta(hours=1):
+        return False
+    return True
+
+
+# ------------------------------------------------------------ Rollover NQ/ES
+#
+# Yahoo NQ=F/ES=F ist eine Endlos-Serie OHNE Back-Adjustment: beim
+# Kontraktwechsel springt der Preis mitten in einer Kerze (14.09.2026 11:30 ET:
+# NQ +377, ES +80). Davor liegen alle Preise im alten Kontrakt, danach im
+# neuen. Sein Chart (NQ1! mit Back-Adjustment) verschiebt die alte Historie um
+# die Roll-Differenz. Ohne diese Korrektur stammen z.B. PWL und PWH aus zwei
+# verschiedenen Kontrakten, die Sprungkerze bildet ein Schein-FVG, und alle
+# FVGs/Ranges vor dem Roll liegen ~300 NQ-Punkte neben seinem Chart.
+#
+# Erkennung (Operationalisierung, steht im Register): im Roll-Fenster (14 Tage
+# vor bis zum dritten Freitag im Maerz/Juni/September/Dezember) eine Kerze, in
+# der NQ UND ES gleichzeitig und gleichgerichtet um mindestens 0,6 % springen,
+# mindestens das 6-fache ihrer ueblichen Kerzenbewegung, und danach nicht
+# zurueckkommen. Roll-Differenz = Close minus Open dieser Kerze (auf 5m
+# genau bis auf wenige Punkte, auf 1h grober). Erkannte Rolls werden in
+# data/rolls.json gespeichert, damit sie auch dann noch bekannt sind, wenn die
+# 5m-Daten den Roll nicht mehr enthalten.
+ROLL_MIN_PROZENT = 0.006
+ROLL_MIN_FAKTOR = 6
+ROLLS_DATEI = os.path.join(DATA, "rolls.json")
+
+
+def dritter_freitag(jahr, monat):
+    d = datetime(jahr, monat, 1).date()
+    erster_fr = d + timedelta(days=(4 - d.weekday()) % 7)
+    return erster_fr + timedelta(days=14)
+
+
+def im_roll_fenster(et):
+    if et.month not in (3, 6, 9, 12):
+        return False
+    df = dritter_freitag(et.year, et.month)
+    return df - timedelta(days=14) <= et.date() <= df
+
+
+def finde_rolls(nq_bars, es_bars, quelle):
+    if len(nq_bars) < 50 or len(es_bars) < 50:
+        return []
+    es_nach_zeit = {b["t"]: i for i, b in enumerate(es_bars)}
+
+    def median_bewegung(bars):
+        werte = sorted(abs(b["c"] - b["o"]) for b in bars)
+        return werte[len(werte) // 2] or 1e-9
+
+    med_nq, med_es = median_bewegung(nq_bars), median_bewegung(es_bars)
+    kandidaten = {}
+    for i, b in enumerate(nq_bars):
+        if not im_roll_fenster(b["et"]):
+            continue
+        j = es_nach_zeit.get(b["t"])
+        if j is None:
+            continue
+        e = es_bars[j]
+        dn, de = b["c"] - b["o"], e["c"] - e["o"]
+        if dn * de <= 0:
+            continue
+        if abs(dn) / b["o"] < ROLL_MIN_PROZENT or abs(de) / e["o"] < ROLL_MIN_PROZENT:
+            continue
+        if abs(dn) < ROLL_MIN_FAKTOR * med_nq or abs(de) < ROLL_MIN_FAKTOR * med_es:
+            continue
+        # Kein Zurueckkommen: 12 Kerzen spaeter noch jenseits der Kerzenmitte
+        spaeter_n = nq_bars[min(i + 12, len(nq_bars) - 1)]["c"]
+        spaeter_e = es_bars[min(j + 12, len(es_bars) - 1)]["c"]
+        mitte_n, mitte_e = b["o"] + dn / 2, e["o"] + de / 2
+        if (spaeter_n - mitte_n) * dn <= 0 or (spaeter_e - mitte_e) * de <= 0:
+            continue
+        fenster = f"{b['et'].year}-{b['et'].month:02d}"
+        alt = kandidaten.get(fenster)
+        if alt is None or abs(dn) / b["o"] > abs(alt["nq"]) / alt["_o"]:
+            kandidaten[fenster] = {
+                "fenster": fenster,
+                "zeit_utc": b["t"].strftime("%Y-%m-%d %H:%M"),
+                "nq": round(dn, 2),
+                "es": round(de, 2),
+                "quelle": quelle,
+                "_o": b["o"],
+            }
+    raus = []
+    for k in sorted(kandidaten):
+        r = dict(kandidaten[k])
+        r.pop("_o")
+        raus.append(r)
+    return raus
+
+
+def lade_rolls():
+    try:
+        with open(ROLLS_DATEI, encoding="utf-8") as fh:
+            return json.load(fh)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return []
+
+
+def rolls_zusammenfuehren(gespeichert, neu):
+    """Pro Roll-Fenster gilt die feinste Quelle (5m vor 15m vor 30m vor 1h)."""
+    rang = {"5m": 0, "15m": 1, "30m": 2, "1h": 3}
+    alle = {}
+    for r in list(gespeichert) + list(neu):
+        alt = alle.get(r["fenster"])
+        if alt is None or rang.get(r["quelle"], 9) < rang.get(alt["quelle"], 9):
+            alle[r["fenster"]] = r
+    return [alle[k] for k in sorted(alle)]
+
+
+def roll_anwenden(bars, rolls, sym, minuten):
+    """
+    Back-Adjustment: jede Kerze VOR einem Roll bekommt die Roll-Differenz(en)
+    aller spaeteren Rolls aufaddiert. Die Kerze, in der der Wechsel passiert,
+    bekommt nur den Open angepasst (der lag noch im alten Kontrakt); High/Low
+    werden so begrenzt, dass kein Schein-Extrem aus dem alten Kontrakt bleibt.
+    """
+    if not rolls or not bars:
+        return bars
+    ereignisse = sorted(
+        (datetime.strptime(r["zeit_utc"], "%Y-%m-%d %H:%M").replace(tzinfo=timezone.utc), r[sym])
+        for r in rolls if r.get(sym) is not None
+    )
+    for b in bars:
+        ende = b["t"] + timedelta(minutes=minuten)
+        offset_spaeter = 0.0
+        splice = None
+        for t_roll, off in ereignisse:
+            if ende <= t_roll:
+                offset_spaeter += off
+            elif b["t"] <= t_roll < ende:
+                splice = off
+        if offset_spaeter:
+            for k in ("o", "h", "l", "c"):
+                b[k] = round(b[k] + offset_spaeter, 2)
+        if splice is not None:
+            b["o"] = round(b["o"] + splice, 2)
+            if splice > 0:
+                b["l"] = min(b["o"], b["c"])
+                b["h"] = max(b["h"], b["o"])
+            else:
+                b["h"] = max(b["o"], b["c"])
+                b["l"] = min(b["l"], b["o"])
+            b["roll_kerze"] = True
+    return bars
+
+
+SERIEN = {}   # name -> {suffix: bars}, einmal geladen und (bei nq/es) rollbereinigt
+ROLLS = []
+
+
+def serien_laden(namen):
+    """Laedt alle Serien der Symbole. Fuer nq/es werden die Rolls erkannt und
+    herausgerechnet, bevor irgendetwas anderes damit rechnet."""
+    global ROLLS
+    for name in namen:
+        SERIEN[name] = {s: vielleicht_laden(name, s) for s in ("5m", "15m", "30m", "1h")}
+    if "nq" in namen and "es" in namen:
+        neu = []
+        for s in ("1h", "30m", "15m", "5m"):
+            neu += finde_rolls(SERIEN["nq"][s], SERIEN["es"][s], s)
+        ROLLS = rolls_zusammenfuehren(lade_rolls(), neu)
+        for name in ("nq", "es"):
+            for s, bars in SERIEN[name].items():
+                roll_anwenden(bars, ROLLS, name, RASTER_MIN[s])
+        try:
+            with open(ROLLS_DATEI, "w", encoding="utf-8") as fh:
+                json.dump(ROLLS, fh, indent=1)
+        except OSError:
+            pass
+    for name in namen:
+        for s, bars in SERIEN[name].items():
+            LUECKEN[(name, s)] = [
+                b["et"].strftime(ZF)
+                for a, b in zip(bars, bars[1:])
+                if ist_luecke(a, b, RASTER_MIN[s])
+            ][-20:]
+
+
+# Serien, die auswerten() tatsaechlich einliest. 1h, 4h und die Tageskerze
+# werden fuer alle Symbole aus den 1h-Bars gebaut (siehe htf_kerzen()), mit
+# viel laengerer Reichweite als die auf 60 Tage gedeckelten 30m-Bars.
+GENUTZTE_SUFFIXE = ("5m", "15m", "30m", "1h")
 
 
 def lade_fetch_meta():
     """
     Liest meta.json von fetch_data.py: Status des letzten Datenabrufs pro
     Serie. Ohne diesen Check faellt ein einzelner fehlgeschlagener Abruf
-    (z.B. nur nq_30m) nirgends auf - fetch_data.py laesst dann einfach die
-    alte CSV liegen und beendet sich trotzdem mit Exit-Code 0 (haerter
-    Fehlschlag nur wenn ALLE Serien fehlschlagen), und berechnet_utc in
-    levels.json zeigt unabhaengig davon immer die aktuelle Laufzeit von
-    analyse.py - nicht, ob die Inputs tatsaechlich frisch sind.
+    nirgends auf - berechnet_utc zeigt immer die Laufzeit von analyse.py,
+    nicht, ob die Inputs tatsaechlich frisch sind.
     """
     pfad = os.path.join(DATA, "meta.json")
     try:
@@ -305,36 +531,57 @@ def lade_fetch_meta():
 
 
 def fetch_warnung_fuer(meta, name):
-    """Welche der tatsaechlich genutzten Serien (5m/15m/30m, bei xau/btc dazu
-    1h) sind beim letzten fetch_data.py-Lauf fehlgeschlagen und liegen
-    deshalb noch mit alten Bars vor?"""
-    if not meta:
-        return None
-    reihen = meta.get("reihen", {})
+    """Welche genutzten Serien sind beim letzten Abruf fehlgeschlagen, und wo
+    fehlen innerhalb der Handelszeit Kerzen (R7)?"""
     fehler = []
-    suffixe = GENUTZTE_SUFFIXE + ("1h",) if name in SYMBOLE_MIT_1H_SUFFIX else GENUTZTE_SUFFIXE
-    for suffix in suffixe:
-        eintrag = reihen.get(f"{name}_{suffix}")
-        if eintrag and eintrag.get("status") != "ok":
-            fehler.append(f"{name}_{suffix}: {eintrag.get('meldung', 'unbekannter Fehler')}")
-    if not fehler:
+    if meta:
+        reihen = meta.get("reihen", {})
+        for suffix in GENUTZTE_SUFFIXE:
+            eintrag = reihen.get(f"{name}_{suffix}")
+            if eintrag and eintrag.get("status") != "ok":
+                fehler.append(f"{name}_{suffix}: {eintrag.get('meldung', 'unbekannter Fehler')}")
+    luecken = {s: LUECKEN.get((name, s)) for s in GENUTZTE_SUFFIXE if LUECKEN.get((name, s))}
+    if not fehler and not luecken:
         return None
-    return {
-        "fehlgeschlagene_serien": fehler,
-        "letzter_abrufversuch_utc": meta.get("generiert_utc"),
-        "hinweis": (
-            "Diese Serie(n) sind beim letzten Datenabruf fehlgeschlagen und "
-            "liegen deshalb noch mit alten Bars vor - die Analyse oben nutzt "
-            "diese veralteten Daten, ohne dass es sonst sichtbar waere."
-        ),
-    }
+    raus = {}
+    if fehler:
+        raus["fehlgeschlagene_serien"] = fehler
+        raus["letzter_abrufversuch_utc"] = (meta or {}).get("generiert_utc")
+        raus["hinweis"] = (
+            "Diese Serie(n) sind beim letzten Datenabruf fehlgeschlagen. Die "
+            "Analyse nutzt dafuer entweder alte oder gar keine Kerzen."
+        )
+    if luecken:
+        raus["fehlende_kerzen"] = luecken
+        raus["hinweis_luecken"] = (
+            "Innerhalb der Handelszeit fehlen bei Yahoo einzelne Kerzen (Zeitpunkt "
+            "= erste Kerze NACH der Luecke). Ueber eine Luecke hinweg wird kein "
+            "FVG gebildet."
+        )
+    return raus
 
 
 # ============================================================ Sessions
 
+# BTC handelt 24/7. Sein BTC-Chart (wie jeder uebliche Krypto-Chart in
+# TradingView) schneidet die Tageskerze um 00:00 UTC, die 4h-Kerzen beginnen
+# um 00/04/08/... UTC. Fuer alle CME-Symbole (NQ, ES, Gold-Future) gilt der
+# CME-Handelstag 18:00 ET bis 17:00 ET.
+TAGESSCHNITT_UTC = ("btc",)
+
+
 def handelstag(bar):
+    if "tag" in bar:
+        return bar["tag"]
     et = bar["et"]
     return et.date() + timedelta(days=1) if et.hour >= 18 else et.date()
+
+
+def tag_ende(name, tag):
+    """Zeitpunkt (UTC), zu dem ein Handelstag geschlossen ist."""
+    if name in TAGESSCHNITT_UTC:
+        return datetime(tag.year, tag.month, tag.day, tzinfo=timezone.utc) + timedelta(days=1)
+    return datetime(tag.year, tag.month, tag.day, 17, 0, tzinfo=ET).astimezone(timezone.utc)
 
 
 def handelswoche(tag):
@@ -365,50 +612,50 @@ def zu_tagen(bars):
     return g
 
 
-INTERVALL_MIN = {"5m": 5, "15m": 15, "30m": 30}
-
-
 def geschlossene(bars, minuten, stand_utc):
     """
-    Liefert die Bars OHNE die noch laufende Kerze.
+    Liefert die Bars OHNE die noch laufende Kerze (Tag 3: "waehrend der
+    laufenden Kerze entscheiden" ist ein typischer Fehler; vor dem Close
+    existiert die Information nicht).
 
-    Tag 3 nennt "waehrend der laufenden Kerze entscheiden" ausdruecklich als
-    typischen Fehler und begruendet es: "Beide sehen live identisch aus,
-    solange die Kerze laeuft - der Unterschied entsteht erst beim Close. Vor
-    dem Close existiert die Information nicht." Yahoo liefert die gerade
-    laufende Kerze mit, also muss sie fuer jede Struktur-Aussage (Swings,
-    MSS/BOS/CISD, FVG, IFVG, Devil Mark, Range) raus.
+    stand_utc ist hier der letzte Tick der Serie (datenende()), NICHT der
+    Abrufzeitpunkt: Yahoo liefert z.B. um 15:19 nur Daten bis 15:10, die
+    15:00-Kerze einer 15m-Serie ist dann noch nicht fertig, obwohl ihr
+    Endzeitpunkt 15:15 vor dem Abruf liegt.
 
-    Nicht betroffen sind Aussagen, die bewusst den Live-Stand meinen:
-    aktueller Preis, Tages-/Session-Hoch und -Tief, PO3, VWAP.
+    Diese Liste ist fuer alles, was einen CLOSE braucht (Bruch, MSS/BOS/CISD,
+    FVG-Bildung, IFVG, Devil Mark, Swing Points). Fuer Wick/Tap/Sweep zaehlt
+    dagegen auch die laufende Kerze - ein Wick ist sofort passiert.
     """
     if not bars or stand_utc is None:
         return bars
-    ende = bars[-1]["t"] + timedelta(minutes=minuten)
-    return bars[:-1] if stand_utc < ende else bars
+    raus = list(bars)
+    while raus and stand_utc < raus[-1]["t"] + timedelta(minutes=minuten):
+        raus.pop()
+    return raus
 
 
-def zu_tageskerzen(bars, ohne_laufenden=True):
+def laufende(bars, geschlossen):
+    """Die Kerzen, die in bars, aber (noch) nicht in geschlossen stehen."""
+    return bars[len(geschlossen):]
+
+
+def zu_tageskerzen(bars, stand_utc=None, name=None):
     """
-    Baut echte Tageskerzen aus den 30m-Bars, nach CME-Sessionschnitt
-    (18:00 ET bis 17:00 ET).
+    Baut Tageskerzen aus Intraday-Kerzen nach Handelstag (CME: 18:00 ET bis
+    17:00 ET; BTC: 00:00 UTC). Der letzte Tag zaehlt nur, wenn er zum Stand
+    schon vorbei ist - am Samstag ist der Freitag also eine geschlossene
+    Tageskerze (F11), unter der Woche ist der laufende Tag keine.
 
     Bewusst NICHT aus der 1d-CSV von Yahoo: deren Tageskerzen laufen von
-    Mitternacht bis Mitternacht und passen damit nicht zu seinem Chart - das
-    ist derselbe Grund, aus dem PDH/PDL hier schon immer aus den 30m-Bars
-    gerechnet werden.
-
-    Gebraucht wird das, weil Tag 9 die Timeframe-Hierarchie ausdruecklich bis
-    ganz oben zieht ("Daily-FVG > 1H/30-Min/15-Min-FVG") und Tag 27 den
-    Top-down-Ablauf mit Weekly und Daily beginnen laesst. Bisher fing die
-    Rechnung erst bei 4h an - die staerksten PD Arrays fehlten damit komplett.
+    Mitternacht bis Mitternacht und passen nicht zu seinem Chart.
     """
     gruppen = {}
     for b in bars:
         gruppen.setdefault(handelstag(b), []).append(b)
     tage = sorted(gruppen)
-    if ohne_laufenden and len(tage) > 1:
-        tage = tage[:-1]  # der laufende Handelstag ist noch nicht geschlossen
+    if tage and not (stand_utc is not None and stand_utc >= tag_ende(name, tage[-1])):
+        tage = tage[:-1]
     out = []
     for t in tage:
         g = gruppen[t]
@@ -416,6 +663,7 @@ def zu_tageskerzen(bars, ohne_laufenden=True):
             {
                 "t": g[0]["t"],
                 "et": g[0]["et"],
+                "tag": t,
                 "o": g[0]["o"],
                 "h": max(x["h"] for x in g),
                 "l": min(x["l"] for x in g),
@@ -426,18 +674,27 @@ def zu_tageskerzen(bars, ohne_laufenden=True):
     return out
 
 
-def resample(bars, stunden, nur_geschlossene=False, stand_utc=None):
+def resample(bars, stunden, nur_geschlossene=False, stand_utc=None, name=None):
+    """n-Stunden-Kerzen. Anker wie in seinem Chart: CME 18:00 ET, BTC 00:00 UTC."""
     out, akt = [], None
     for b in bars:
-        et = b["et"]
-        anker = et.replace(hour=18, minute=0, second=0, microsecond=0)
-        if et.hour < 18:
-            anker -= timedelta(days=1)
-        key = (anker, int((et - anker).total_seconds() // (stunden * 3600)))
+        if name in TAGESSCHNITT_UTC:
+            anker = b["t"].replace(hour=0, minute=0, second=0, microsecond=0)
+            key = (anker, int((b["t"] - anker).total_seconds() // (stunden * 3600)))
+            start = anker + timedelta(hours=key[1] * stunden)
+        else:
+            et = b["et"]
+            anker = et.replace(hour=18, minute=0, second=0, microsecond=0)
+            if et.hour < 18:
+                anker -= timedelta(days=1)
+            key = (anker, int((et - anker).total_seconds() // (stunden * 3600)))
+            start = (anker + timedelta(hours=key[1] * stunden)).astimezone(timezone.utc)
         if akt is None or akt["key"] != key:
             if akt:
                 out.append(akt)
-            akt = dict(key=key, t=b["t"], et=et, o=b["o"], h=b["h"], l=b["l"], c=b["c"])
+            akt = dict(key=key, t=start, et=start.astimezone(ET), o=b["o"], h=b["h"], l=b["l"], c=b["c"])
+            if "tag" in b:
+                akt["tag"] = b["tag"]
         else:
             akt["h"] = max(akt["h"], b["h"])
             akt["l"] = min(akt["l"], b["l"])
@@ -449,49 +706,36 @@ def resample(bars, stunden, nur_geschlossene=False, stand_utc=None):
     return out
 
 
-# Symbole, fuer die 4h/1d nicht aus den (auf 60 Tage gedeckelten) 30m-Bars
-# resampled werden, sondern aus einer eigenen, viel laenger zurueckreichenden
-# 1h-Serie (siehe fetch_data.py, SERIES_LANGE_1H_HISTORIE). Grund: reines
-# 30m-Resampling laesst jede Struktur (v.a. FVGs), die aelter als 60 Tage
-# ist, ersatzlos aus fvg_1d/fvg_4h/trend_1d/struktur_1d etc. herausfallen -
-# genau das hat im Januar zu einem falschen XAU-Daily-Bias gefuehrt (eine
-# Reihe Daily-FVGs war schlicht nicht mehr sichtbar, obwohl der Preis danach
-# genau dorthin gelaufen ist). NQ/ES bleiben unveraendert, wie bisher aus 30m.
-SYMBOLE_LANGE_HTF_HISTORIE = ("xau", "btc")
-# Unter dieser Anzahl 1h-Bars wird der eigenen 1h-Serie nicht getraut (z.B.
-# eine frisch angelegte oder fehlgeschlagene CSV) - dann faellt es auf das
-# alte 30m-Resampling zurueck, damit ein einzelner kaputter Abruf nicht die
-# ganze Analyse lahmlegt.
+# Unter dieser Anzahl 1h-Bars wird der eigenen 1h-Serie nicht getraut - dann
+# faellt es auf das 30m-Resampling zurueck.
 MIN_1H_BARS_EIGENE_SERIE = 60
 
 
-def htf_kerzen(name, bars_30m, bars_30m_z, stand_utc):
+def htf_kerzen(name, bars_30m, stand_utc):
     """
-    Baut 1h-, 4h- und Tageskerzen fuer auswerten().
+    Baut 1h-, 4h- und Tageskerzen - fuer ALLE Symbole aus der eigenen, lang
+    zurueckreichenden 1h-Serie (730 Tage), bei NQ/ES rollbereinigt. Reines
+    30m-Resampling liess alles, was aelter als 60 Tage ist, aus fvg_1d/fvg_4h/
+    trend_1d/struktur_1d herausfallen (Januar-Fehler bei XAU; bei NQ/ES
+    dieselbe Luecke). Rueckfall auf 30m, wenn die 1h-Serie fehlt.
 
-    Fuer NQ/ES wie bisher: alle drei aus den 30m-Bars resampled/gruppiert -
-    deren Reichweite (60 Tage) war dort nie das Problem, weil niemand mehr
-    als ein paar Wochen zurueckschaut.
-
-    Fuer XAU/BTC aus der eigenen, viel laenger zurueckreichenden 1h-Serie:
-    b1h direkt daraus (nur die noch laufende Kerze abgeschnitten), b4h und
-    b1d per resample()/zu_tageskerzen() DARAUS statt aus den 30m-Bars - beide
-    Funktionen gruppieren nur nach Stunden-Anker bzw. Handelstag und sind
-    unabhaengig von der Balkengroesse der Eingabe. Schlaegt das fehl (Serie
-    fehlt oder ist zu kurz), Rueckfall auf dieselbe 30m-Methode wie bei NQ/ES.
+    Rueckgabe: (b1h_geschlossen, b1h_alle, b4h_geschlossen, b4h_alle, b1d)
     """
-    if name in SYMBOLE_LANGE_HTF_HISTORIE:
-        b1h_roh = vielleicht_laden(name, "1h")
-        b1h_lang = geschlossene(b1h_roh, 60, stand_utc)
-        if len(b1h_lang) >= MIN_1H_BARS_EIGENE_SERIE:
-            b4h = resample(b1h_lang, 4, nur_geschlossene=True, stand_utc=stand_utc)
-            b1d = zu_tageskerzen(b1h_lang)
-            return b1h_lang, b4h, b1d
-
-    b1h = resample(bars_30m, 1, nur_geschlossene=True, stand_utc=stand_utc)
-    b4h = resample(bars_30m, 4, nur_geschlossene=True, stand_utc=stand_utc)
-    b1d = zu_tageskerzen(bars_30m_z)
-    return b1h, b4h, b1d
+    ende_1h = datenende(name, "1h", stand_utc)
+    b1h_roh = SERIEN.get(name, {}).get("1h") or []
+    if len(b1h_roh) >= MIN_1H_BARS_EIGENE_SERIE:
+        b1h_alle = b1h_roh
+        b1h = geschlossene(b1h_roh, 60, ende_1h)
+        b4h_alle = resample(b1h_roh, 4, name=name)
+        b4h = geschlossene(b4h_alle, 240, ende_1h)
+        b1d = zu_tageskerzen(b1h_roh, ende_1h, name)
+        return b1h, b1h_alle, b4h, b4h_alle, b1d
+    ende_30 = datenende(name, "30m", stand_utc)
+    b1h_alle = resample(bars_30m, 1, name=name)
+    b4h_alle = resample(bars_30m, 4, name=name)
+    return (geschlossene(b1h_alle, 60, ende_30), b1h_alle,
+            geschlossene(b4h_alle, 240, ende_30), b4h_alle,
+            zu_tageskerzen(bars_30m, ende_30, name))
 
 
 # ============================================================ Struktur
@@ -720,31 +964,68 @@ def bruch_pruefen(bars, level, richtung, ab_index=0):
     Gibt zurueck, ob ein Level nur gesweept (Wick) oder gebrochen (Body Close) wurde.
     richtung 'ueber' prueft nach oben, 'unter' nach unten.
     """
-    wick = False
+    wick = None
     for b in bars[ab_index:]:
         if richtung == "ueber":
-            if b["h"] > level:
-                wick = True
+            if b["h"] > level and wick is None:
+                wick = b
             if b["c"] > level:
-                return {"status": "body_close", "zeit_et": b["et"].strftime("%m-%d %H:%M")}
+                r = {"status": "body_close", "zeit_et": b["et"].strftime(ZF)}
+                if wick is not None and wick is not b:
+                    r["erster_sweep_et"] = wick["et"].strftime(ZF)
+                return r
         else:
-            if b["l"] < level:
-                wick = True
+            if b["l"] < level and wick is None:
+                wick = b
             if b["c"] < level:
-                return {"status": "body_close", "zeit_et": b["et"].strftime("%m-%d %H:%M")}
-    return {"status": "sweep" if wick else "unberuehrt"}
+                r = {"status": "body_close", "zeit_et": b["et"].strftime(ZF)}
+                if wick is not None and wick is not b:
+                    r["erster_sweep_et"] = wick["et"].strftime(ZF)
+                return r
+    if wick is not None:
+        return {"status": "sweep", "sweep_et": wick["et"].strftime(ZF)}
+    return {"status": "unberuehrt"}
+
+
+def status_mit_live(geschlossen, live, level, richtung):
+    """
+    Wie bruch_pruefen, aber mit der richtigen Kerzenbasis (F3): der Body Close
+    zaehlt nur auf geschlossenen Kerzen (Tag 3), ein Wick der laufenden Kerze
+    ist dagegen schon passiert und macht aus "unberuehrt" einen "sweep".
+    """
+    r = bruch_pruefen(geschlossen, level, richtung)
+    if r["status"] == "unberuehrt" and live:
+        if any((b["h"] > level) if richtung == "ueber" else (b["l"] < level) for b in live):
+            r = {"status": "sweep", "durch_laufende_kerze": True}
+    return r
 
 
 # ============================================================ PD Arrays
 
-def finde_fvgs(bars, max_offen=10):
+# Operationalisierung zu Tag 10 ("knapper Body Close zaehlt nicht"): jeder
+# Close jenseits des Gaps macht ein IFVG, aber liegt er weniger als diesen
+# Anteil der Gap-Breite jenseits, wird das IFVG als "knapp" markiert.
+def finde_fvgs(bars, live=(), minuten=None, max_mediated=10, max_unmediated=None):
     """
-    FVG nach Tag 9. Liefert nur Gaps, die noch nicht komplett gefuellt sind,
-    plus die Info ob sie invertiert wurden (IFVG, Tag 10) und ob unmediated.
+    FVG nach Tag 9 (3 Kerzen, Wicks von Kerze 1 und 3 ueberlappen nicht, Groesse
+    egal) aus den GESCHLOSSENEN Kerzen. Fuer die Frage "angetappt?" (mediated,
+    Tag 10) und "komplett gefuellt?" zaehlt auch die laufende Kerze (live) - ein
+    Wick ist sofort passiert. Fuer die Inversion (IFVG, Tag 10/16/18) zaehlt nur
+    ein Close auf derselben Timeframe, also nur geschlossene Kerzen.
+
+    Ueber eine Datenluecke hinweg (ist_luecke) wird kein FVG gebildet.
+
+    Jeder Eintrag traegt interne Felder (_i, _t_entstanden, _t_tap, _t_ifvg),
+    die vor der Ausgabe per ohne_intern() entfernt werden - sie werden fuer
+    Zeitbezugs-Fragen gebraucht (gab es das FVG zu einem bestimmten Zeitpunkt
+    schon? war es da schon invertiert?).
     """
     raus = []
+    alle = list(bars) + list(live)
     for i in range(len(bars) - 2):
-        a, c = bars[i], bars[i + 2]
+        a, m, c = bars[i], bars[i + 1], bars[i + 2]
+        if minuten and (ist_luecke(a, m, minuten) or ist_luecke(m, c, minuten)):
+            continue
         if c["l"] > a["h"]:
             unten, oben, richtung = a["h"], c["l"], "bullish"
         elif c["h"] < a["l"]:
@@ -752,72 +1033,68 @@ def finde_fvgs(bars, max_offen=10):
         else:
             continue
 
-        spaeter = bars[i + 3 :]
-        beruehrt = any(s["l"] < oben and s["h"] > unten for s in spaeter)
-        tiefste = min([s["l"] for s in spaeter], default=oben)
-        hoechste = max([s["h"] for s in spaeter], default=unten)
+        spaeter_alle = alle[i + 3 :]
+        spaeter_zu = bars[i + 3 :]
+        tap = next((s for s in spaeter_alle if s["l"] < oben and s["h"] > unten), None)
+        tiefste = min([s["l"] for s in spaeter_alle], default=oben)
+        hoechste = max([s["h"] for s in spaeter_alle], default=unten)
 
-        # IFVG: Body Close komplett durch das Gap, auf derselben Timeframe
-        # (Tag 10/16/18). Wird VOR der Gefuellt-Pruefung bestimmt, weil davon
-        # abhaengt, ob das Gap verworfen werden darf.
         if richtung == "bullish":
-            invertiert = any(s["c"] < unten for s in spaeter)
+            inv = next((s for s in spaeter_zu if s["c"] < unten), None)
+            abstand = (unten - inv["c"]) if inv else None
         else:
-            invertiert = any(s["c"] > oben for s in spaeter)
+            inv = next((s for s in spaeter_zu if s["c"] > oben), None)
+            abstand = (inv["c"] - oben) if inv else None
 
-        if tiefste <= unten and hoechste >= oben and not invertiert:
-            # Komplett gefuellt und nie invertiert -> als Level durch.
-            #
-            # Ein INVERTIERTES Gap bleibt dagegen drin, auch wenn sein
-            # Bereich inzwischen komplett durchlaufen wurde. Tag 10 nutzt
-            # IFVGs ausdruecklich als Entry-Trigger und nennt sie "eines der
-            # ersten Dinge, die man bei einem Trendwechsel sehen kann" - ein
-            # IFVG ist also gerade kein verbrauchtes Level. Die fruehere
-            # Version warf genau diese Faelle weg, sobald der Preis spaeter
-            # nochmal ueber das Gap zurueckkam.
+        if tiefste <= unten and hoechste >= oben and inv is None:
+            # Komplett gefuellt und nie invertiert -> als Level durch. Ein
+            # invertiertes Gap bleibt als IFVG drin (Tag 10: Entry-Trigger).
             continue
 
-        raus.append(
-            {
-                "richtung": richtung,
-                "von": round(unten, 2),
-                "bis": round(oben, 2),
-                "mitte": round((unten + oben) / 2, 2),
-                "et": c["et"].strftime("%m-%d %H:%M"),
-                "unmediated": not beruehrt,
-                "ifvg": invertiert,
-                "_i": i + 2,  # intern, wird vor der Ausgabe entfernt
-            }
-        )
-    # Begrenzung der Ausgabe. Wichtig dabei: Tag 10 sagt ausdruecklich "er
-    # tradet nur unmediated FVGs" - ein noch nicht angetapptes Gap ist also
-    # das wertvollste, was diese Liste enthaelt. Die fruehere Version schnitt
-    # stumpf nach Entstehungszeit ab und konnte dabei ein unmediated Gap
-    # wegwerfen, waehrend ein aelteres, bereits angetapptes drin blieb.
-    # Deshalb: erst alle unmediated behalten, dann mit den juengsten
-    # mediated auffuellen. Die Reihenfolge bleibt chronologisch.
-    if len(raus) > max_offen:
-        unmediated = [f for f in raus if f["unmediated"]]
-        mediated = [f for f in raus if not f["unmediated"]]
-        platz = max(0, max_offen - len(unmediated))
-        # Achtung: mediated[-0:] waere in Python die GANZE Liste, nicht die
-        # leere - deshalb der explizite Fall.
-        auffuellen = mediated[len(mediated) - platz :] if platz else []
-        behalten = set(id(f) for f in unmediated[-max_offen:]) | set(
-            id(f) for f in auffuellen
-        )
-        raus = [f for f in raus if id(f) in behalten]
-    return raus[-max_offen:]
+        breite = oben - unten
+        eintrag = {
+            "richtung": richtung,
+            "von": round(unten, 2),
+            "bis": round(oben, 2),
+            "mitte": round((unten + oben) / 2, 2),
+            "et": c["et"].strftime(ZF),
+            "unmediated": tap is None,
+            "erster_tap_et": tap["et"].strftime(ZF) if tap else None,
+            "ifvg": inv is not None,
+            "_i": i + 2,
+            # Ab wann existiert das FVG? Mit dem Close der 3. Kerze.
+            "_t_entstanden": (c["t"] + timedelta(minutes=minuten)) if minuten else (
+                bars[i + 3]["t"] if i + 3 < len(bars) else c["t"] + timedelta(days=1)),
+            "_t_tap": tap["t"] if tap else None,
+            "_t_ifvg": inv["t"] if inv else None,
+        }
+        if inv is not None:
+            eintrag["ifvg_et"] = inv["et"].strftime(ZF)
+            eintrag["ifvg_abstand_pkt"] = round(abstand, 2)
+            eintrag["ifvg_knapp"] = breite > 0 and abstand < IFVG_KNAPP_ANTEIL * breite
+        raus.append(eintrag)
+
+    # Begrenzung: Tag 10 - er tradet nur unmediated FVGs, das sind die
+    # wertvollsten Eintraege. Deshalb ALLE unmediated behalten (optional
+    # gedeckelt) und mit den juengsten mediated auffuellen. Chronologisch.
+    unmediated = [f for f in raus if f["unmediated"]]
+    if max_unmediated is not None:
+        unmediated = unmediated[-max_unmediated:]
+    mediated = [f for f in raus if not f["unmediated"]]
+    mediated = mediated[len(mediated) - max_mediated:] if max_mediated else []
+    behalten = set(id(f) for f in unmediated) | set(id(f) for f in mediated)
+    return [f for f in raus if id(f) in behalten]
 
 
 def ohne_intern(liste):
-    """Interne Hilfsfelder (_i) vor dem Schreiben nach JSON rauswerfen."""
+    """Interne Hilfsfelder (_...) vor dem Schreiben nach JSON rauswerfen."""
     for eintrag in liste:
-        eintrag.pop("_i", None)
+        for k in [k for k in eintrag if k.startswith("_")]:
+            eintrag.pop(k, None)
     return liste
 
 
-def intermediate_levels(bars, tf_name, max_out=3):
+def intermediate_levels(bars, tf_name, minuten=None, max_zu=3, live=()):
     """
     ITH/ITL nach Tag 16 (Liquidity Pools 2), woertlich:
     "Ein High/Low, das aus einem High-Timeframe-FVG (alles ueber 15 Minuten,
@@ -857,6 +1134,8 @@ def intermediate_levels(bars, tf_name, max_out=3):
     raus = []
     for i in range(len(bars) - 2):
         a, c = bars[i], bars[i + 2]
+        if minuten and (ist_luecke(a, bars[i + 1], minuten) or ist_luecke(bars[i + 1], c, minuten)):
+            continue
         if c["l"] > a["h"]:
             unten, oben, richtung = a["h"], c["l"], "bullish"
         elif c["h"] < a["l"]:
@@ -904,7 +1183,7 @@ def intermediate_levels(bars, tf_name, max_out=3):
             weiter = bars[b_idx + 1 :]
             if not weiter or min(b["l"] for b in weiter) >= bestaetigung["l"]:
                 continue
-            bruch = bruch_pruefen(nach, level, "unter")
+            bruch = status_mit_live(nach, live, level, "unter")
             art = "ITL"
         else:
             start = max(zwischen, key=lambda b: b["h"])
@@ -912,14 +1191,14 @@ def intermediate_levels(bars, tf_name, max_out=3):
             tief = min(b["l"] for b in zwischen)
             if level <= tief:
                 continue
-            bestaetigung = next((b for b in fenster if b["c"] > b["o"]), None)
-            if bestaetigung is None:
+            b_idx = next((k for k in fenster_idx if bars[k]["c"] > bars[k]["o"]), None)
+            if b_idx is None:
                 continue
-            danach_idx = bars.index(bestaetigung) + 1
-            weiter = bars[danach_idx:]
+            bestaetigung = bars[b_idx]
+            weiter = bars[b_idx + 1 :]
             if not weiter or max(b["h"] for b in weiter) <= bestaetigung["h"]:
                 continue
-            bruch = bruch_pruefen(nach, level, "ueber")
+            bruch = status_mit_live(nach, live, level, "ueber")
             art = "ITH"
 
         # status: "unberuehrt" (noch offen), "sweep" (nur Wick durchs Level,
@@ -931,14 +1210,14 @@ def intermediate_levels(bars, tf_name, max_out=3):
             "preis": round(level, 2),
             "aus_fvg": [round(unten, 2), round(oben, 2)],
             "fvg_breite": round(oben - unten, 2),
-            "tap_et": bars[tap]["et"].strftime("%m-%d %H:%M"),
+            "tap_et": bars[tap]["et"].strftime(ZF),
             # Liegt das Extrem in derselben Kerze wie der Tap, laesst sich aus
             # dieser Timeframe nicht belegen, ob das Hoch/Tief WIRKLICH vor
             # dem Tap lag - innerhalb einer Kerze ist die Reihenfolge nicht
             # sichtbar. Tag 16 verlangt aber ausdruecklich das High/Low DAVOR.
             # Deshalb wird der Fall markiert statt stillschweigend behauptet.
             "extrem_in_tap_kerze": start is bars[tap],
-            "et": start["et"].strftime("%m-%d %H:%M"),
+            "et": start["et"].strftime(ZF),
             "status": bruch["status"],
         }
         if "zeit_et" in bruch:
@@ -963,40 +1242,107 @@ def intermediate_levels(bars, tf_name, max_out=3):
     # gebrochenes ITL ist als Ziel durch. Deshalb behalten noch offene
     # Levels (unberuehrt/sweep) Vorrang vor bereits gebrochenen, statt
     # stumpf nach Zeit abzuschneiden.
-    if len(einmalig) > max_out:
-        offen = [r for r in einmalig if r["status"] != "body_close"]
-        zu = [r for r in einmalig if r["status"] == "body_close"]
-        platz = max(0, max_out - len(offen))
-        auffuellen = zu[len(zu) - platz :] if platz else []
-        behalten = set(id(r) for r in offen[-max_out:]) | set(
-            id(r) for r in auffuellen
-        )
-        einmalig = [r for r in einmalig if id(r) in behalten]
-    return einmalig[-max_out:]
+    # Alle noch offenen (unberuehrt/sweep) behalten, von den schon mit Body
+    # Close genommenen nur die juengsten - die sind als Ziel durch.
+    offen = [r for r in einmalig if r["status"] != "body_close"]
+    zu = [r for r in einmalig if r["status"] == "body_close"]
+    zu = zu[len(zu) - max_zu:] if max_zu else []
+    behalten = set(id(r) for r in offen) | set(id(r) for r in zu)
+    return [r for r in einmalig if id(r) in behalten]
 
 
-def markiere_sponsorship(fvgs, bars, htf_zonen, key_levels, rueckblick=SPONSOR_RUECKBLICK):
+class Zeitachse:
     """
-    Sponsorship nach Tag 22, woertlich:
-    "Ein Trading Leg gilt als gesponsort, wenn es aus einem
-    High-Timeframe-Key-Level (alles ueber 30 Minuten) oder einem
-    entsprechenden Liquidity Sweep entstanden ist. Jedes Low-Timeframe-FVG,
-    das innerhalb eines solchen gesponserten Legs entsteht, gilt selbst
-    ebenfalls als gesponsort."
+    Welche Key Levels gab es zu einem bestimmten Zeitpunkt schon?
 
-    Haeufiger Fehler laut Bootcamp: "Ein 5m-FVG als Quelle nehmen - der
-    Sponsor muss mindestens 30 Minuten sein." Deshalb kommen als Quelle nur
-    30m/1h/4h-FVGs und HTF-Key-Level-Sweeps in Frage, nie ein LTF-FVG.
+    Das ist die Grundlage gegen den "Blick in die Zukunft" (F1, F4, F5, F6,
+    F7): Ein Rejection Block, ein Sponsor oder eine Manipulation kann sich nur
+    auf ein Level beziehen, das zu diesem Zeitpunkt existierte. PDH/PDL sind
+    die des Vortags DIESES Zeitpunkts, PWH/PWL der Vorwoche, PMH/PML des
+    Vormonats. Session-Levels existieren erst nach dem Ende ihrer Session
+    (Tag 7: "Jede Session hinterlaesst ein High und ein Low").
     """
-    werte = {k: v for k, v in key_levels.items() if v}
+
+    SESSIONS = {"asia": (20, 0, 0, 0), "london": (2, 0, 6, 0), "ny_am": (9, 30, 11, 0)}
+
+    def __init__(self, name, bars):
+        self.name = name
+        self.mit_sessions = name not in SYMBOLE_OHNE_SESSIONS
+        self.tage = zu_tagen(bars)
+        self.sortiert = sorted(self.tage)
+        self.tag_hl = {t: hl(self.tage[t]) for t in self.sortiert}
+        self.cache = {}
+
+    def _vorgaenger(self, tage, tag):
+        vor = [t for t in tage if t < tag]
+        return vor[-1] if vor else None
+
+    def levels(self, zeit_utc):
+        bar = {"t": zeit_utc, "et": zeit_utc.astimezone(ET)}
+        if self.name in TAGESSCHNITT_UTC:
+            bar["tag"] = zeit_utc.date()
+        tag = handelstag(bar)
+        schluessel = (tag, zeit_utc.strftime("%Y%m%d%H%M"))
+        if schluessel in self.cache:
+            return self.cache[schluessel]
+        raus = {}
+        vortag = self._vorgaenger(self.sortiert, tag)
+        if vortag:
+            raus["pdh"], raus["pdl"] = self.tag_hl[vortag]["high"], self.tag_hl[vortag]["low"]
+        woche = handelswoche(tag)
+        vorwoche_tage = [t for t in self.sortiert if handelswoche(t) == woche - timedelta(days=7)]
+        if vorwoche_tage:
+            raus["pwh"] = max(self.tag_hl[t]["high"] for t in vorwoche_tage)
+            raus["pwl"] = min(self.tag_hl[t]["low"] for t in vorwoche_tage)
+        vormonat = (tag.year, tag.month - 1) if tag.month > 1 else (tag.year - 1, 12)
+        vormonat_tage = [t for t in self.sortiert if (t.year, t.month) == vormonat]
+        # Nur wenn der Vormonat in den Daten vollstaendig ab Monatsanfang liegt
+        if vormonat_tage and vormonat_tage[0].day <= 3:
+            raus["pmh"] = max(self.tag_hl[t]["high"] for t in vormonat_tage)
+            raus["pml"] = min(self.tag_hl[t]["low"] for t in vormonat_tage)
+        if self.mit_sessions and tag in self.tage:
+            for sname, w in self.SESSIONS.items():
+                sb = [x for x in self.tage[tag] if in_fenster(x, *w) and x["t"] < zeit_utc]
+                if not sb:
+                    continue
+                # Session vorbei? Die letzte Kerze vor zeit_utc liegt nicht mehr im Fenster
+                nach = [x for x in self.tage[tag] if x["t"] < zeit_utc and not in_fenster(x, *w) and x["t"] > sb[-1]["t"]]
+                if not nach:
+                    continue
+                raus[f"{sname}_high"] = max(x["h"] for x in sb)
+                raus[f"{sname}_low"] = min(x["l"] for x in sb)
+        self.cache[schluessel] = raus
+        return raus
+
+
+def zonen_zum_zeitpunkt(htf_zonen, zeit_utc):
+    """HTF-FVGs, die zum Zeitpunkt schon existierten und noch nicht invertiert waren."""
+    return [
+        z for z in htf_zonen
+        if z["_t_entstanden"] <= zeit_utc and (z["_t_ifvg"] is None or z["_t_ifvg"] > zeit_utc)
+    ]
+
+
+def markiere_sponsorship(fvgs, bars, htf_zonen, zeitachse, rueckblick=SPONSOR_RUECKBLICK):
+    """
+    Sponsorship nach Tag 22: "Ein Trading Leg gilt als gesponsort, wenn es aus
+    einem High-Timeframe-Key-Level (...) oder einem entsprechenden Liquidity
+    Sweep entstanden ist. Jedes Low-Timeframe-FVG, das innerhalb eines solchen
+    gesponserten Legs entsteht, gilt selbst ebenfalls als gesponsort."
+    Quelle mindestens 30 Minuten (Tag 22) - nie ein LTF-FVG.
+
+    WICHTIG (F1): bars muss GENAU die Liste sein, auf der finde_fvgs die FVGs
+    gefunden hat - der Index _i bezieht sich darauf. Die fruehere Version
+    uebergab den ganzen Datenbestand und suchte den Ursprung damit zwei Monate
+    zu frueh. Als Sponsor zaehlen ausserdem nur Levels und HTF-FVGs, die zum
+    Start des Legs schon existierten.
+    """
     for f in fvgs:
-        i = f.pop("_i", None)
+        i = f.get("_i")
         f["gesponsort"] = False
         f["sponsor"] = None
-        if i is None:
+        if i is None or i >= len(bars):
             continue
-
-        # Ursprung des Legs: das Extrem, aus dem das Leg gelaufen ist
         fenster = bars[max(0, i - rueckblick) : i + 1]
         if len(fenster) < 3:
             continue
@@ -1006,9 +1352,10 @@ def markiere_sponsorship(fvgs, bars, htf_zonen, key_levels, rueckblick=SPONSOR_R
         else:
             start = max(fenster, key=lambda b: b["h"])
             preis = start["h"]
+        f["leg_start_et"] = start["et"].strftime(ZF)
 
-        # a) Leg startet in einem HTF-FVG (ab 30m)
-        for z in htf_zonen:
+        # a) Leg startet in einem HTF-FVG (ab 30m), das damals schon existierte
+        for z in zonen_zum_zeitpunkt(htf_zonen, start["t"]):
             if z["von"] <= preis <= z["bis"]:
                 f["gesponsort"] = True
                 f["sponsor"] = f"{z['tf']}-FVG {z['von']}-{z['bis']}"
@@ -1016,11 +1363,9 @@ def markiere_sponsorship(fvgs, bars, htf_zonen, key_levels, rueckblick=SPONSOR_R
         if f["gesponsort"]:
             continue
 
-        # b) Leg startet aus einem Sweep eines HTF-Key-Levels.
-        # Keine Naehe-Toleranz: ein Sweep ist per Definition (Tag 3) "Wick
-        # jenseits des Levels, kein Body Close" - wie weit der Wick drueber
-        # hinausschiesst, spielt dafuer keine Rolle.
-        for name, lv in werte.items():
+        # b) Leg startet aus einem Sweep eines HTF-Key-Levels, das damals
+        #    schon existierte. Sweep = Wick jenseits, Body diesseits (Tag 3).
+        for name, lv in zeitachse.levels(start["t"]).items():
             nach_oben = name.endswith("h") or name.endswith("high")
             if nach_oben and start["h"] > lv >= max(start["o"], start["c"]):
                 f["gesponsort"] = True
@@ -1033,50 +1378,36 @@ def markiere_sponsorship(fvgs, bars, htf_zonen, key_levels, rueckblick=SPONSOR_R
     return fvgs
 
 
-def rejection_blocks(bars, key_levels, htf_zonen=None, max_out=6):
+def rejection_blocks(bars, zeitachse, htf_zonen=None, max_out=6):
     """
     RB nach Tag 12: starke Reaction aus einem HTF Key Level, bestaetigt durch
-    Body Close in die Gegenrichtung. Der RB ist der Wick. Darf sich ueber
-    zwei Kerzen erstrecken.
+    Body Close in die Gegenrichtung. Der RB ist der Wick. Darf sich ueber zwei
+    Kerzen erstrecken. HTF Key Level = alle Liquidity Pools PLUS HTF-FVGs.
 
-    Tag 12 definiert "High Timeframe Key Level" ausdruecklich als "alle bisher
-    gelernten Liquidity Pools (Session Highs/Lows, Previous Day High/Low, Data
-    High/Low, Equal Highs) PLUS High-Timeframe-FVGs (alles ueber 30 Minuten,
-    auch Daily/Weekly)". Die fruehere Version kannte nur die Liquidity Pools
-    und hat die HTF-FVGs komplett ignoriert - damit fehlte genau die Haelfte
-    der moeglichen Rejection Blocks. htf_zonen liefert diese FVGs nach.
+    F4: Jede Kerze wird nur gegen die Levels geprueft, die zu IHREM Zeitpunkt
+    existierten (Zeitachse) - die fruehere Version hielt fuenf Tage alte
+    Kerzen gegen die heutigen Levels und gegen FVGs, die erst spaeter
+    entstanden, und meldete damit RBs, die es nie gab.
 
-    Erkennung als echte Ablehnung am Level (Tag 3: "Wick = Ablehnung, Close =
-    Akzeptanz"): der Wick muss das Level erreichen oder ueberschiessen, der
-    Body muss diesseits bleiben. KEINE Naehe-Toleranz mehr - die fruehere
-    Version verlangte, dass der Wick innerhalb von 0,06 % am Level endet, und
-    hat damit genau die klassischen Faelle uebersehen, in denen der Sweep
-    deutlich ueber das Level hinausschiesst und erst dann rejected. Wie weit
-    der Wick hinausschiesst, spielt laut Bootcamp keine Rolle.
-
-    Einzige Operationalisierung ohne woertliche Bootcamp-Vorgabe: "starke
-    Reaction" wird als Wick > 50 % der Kerzenspanne gelesen.
+    Einzige Operationalisierung: "starke Reaction" = Wick > 50 % der Kerzenspanne.
+    Die Bestaetigungskerze muss geschlossen sein (bars = nur geschlossene).
     """
     raus = []
-    werte = [(k, v) for k, v in key_levels.items() if v]
-    # HTF-FVGs kommen als zwei Levels dazu: eine Reaction kann an der Ober-
-    # wie an der Unterkante des Gaps stattfinden.
-    for z in htf_zonen or []:
-        werte.append((f"{z['tf']}-FVG {z['von']}-{z['bis']} (Oberkante)", z["bis"]))
-        werte.append((f"{z['tf']}-FVG {z['von']}-{z['bis']} (Unterkante)", z["von"]))
     for i in range(1, len(bars) - 1):
         b, nxt = bars[i], bars[i + 1]
+        werte = [(k, v) for k, v in zeitachse.levels(b["t"]).items() if v]
+        for z in zonen_zum_zeitpunkt(htf_zonen or [], b["t"]):
+            werte.append((f"{z['tf']}-FVG {z['von']}-{z['bis']} (Oberkante)", z["bis"]))
+            werte.append((f"{z['tf']}-FVG {z['von']}-{z['bis']} (Unterkante)", z["von"]))
         koerper_hoch = max(b["o"], b["c"])
         koerper_tief = min(b["o"], b["c"])
         oberer_wick = b["h"] - koerper_hoch
         unterer_wick = koerper_tief - b["l"]
         spanne = max(b["h"] - b["l"], 1e-9)
 
-        # Wick jenseits des Levels, Body diesseits -> Ablehnung am Level
         oben_lv = next((k for k, lv in werte if b["h"] >= lv > koerper_hoch), None)
         unten_lv = next((k for k, lv in werte if b["l"] <= lv < koerper_tief), None)
 
-        # Bearischer RB: langer oberer Wick am Level + bearisher Close
         if oben_lv and oberer_wick / spanne > RB_WICK_ANTEIL and (b["c"] < b["o"] or nxt["c"] < nxt["o"]):
             raus.append(
                 {
@@ -1085,10 +1416,9 @@ def rejection_blocks(bars, key_levels, htf_zonen=None, max_out=6):
                     "von": round(koerper_hoch, 2),
                     "bis": round(b["h"], 2),
                     "mitte": round((koerper_hoch + b["h"]) / 2, 2),
-                    "et": b["et"].strftime("%m-%d %H:%M"),
+                    "et": b["et"].strftime(ZF),
                 }
             )
-        # Bullischer RB: langer unterer Wick am Level + bullisher Close
         if unten_lv and unterer_wick / spanne > RB_WICK_ANTEIL and (b["c"] > b["o"] or nxt["c"] > nxt["o"]):
             raus.append(
                 {
@@ -1097,7 +1427,7 @@ def rejection_blocks(bars, key_levels, htf_zonen=None, max_out=6):
                     "von": round(b["l"], 2),
                     "bis": round(koerper_tief, 2),
                     "mitte": round((b["l"] + koerper_tief) / 2, 2),
-                    "et": b["et"].strftime("%m-%d %H:%M"),
+                    "et": b["et"].strftime(ZF),
                 }
             )
     return raus[-max_out:]
@@ -1122,24 +1452,23 @@ def devil_marks(bars, symbol, max_out=5):
     if symbol not in DEVIL_MARK_SYMBOLE:
         return None
     raus = []
-    # Die letzte Bar ist am Datenrand fast immer noch offen. Eine laufende
-    # Kerze hat naturgemaess kaum Wicks und wuerde sonst jedes Mal als Devil
-    # Mark durchgehen - nach Tag 3 existiert die Information vor dem Close
-    # schlicht noch nicht. Gleiches gilt fuer Bars ganz ohne Spanne.
-    for b in bars[:-1]:
+    # bars enthaelt nur GESCHLOSSENE Kerzen (die laufende hat naturgemaess
+    # kaum Wicks und existiert nach Tag 3 vor dem Close noch nicht). Bars ohne
+    # Spanne werden uebersprungen.
+    for b in bars:
         if b["h"] - b["l"] <= 0:
             continue
         wick_oben = b["h"] - max(b["o"], b["c"])
         wick_unten = min(b["o"], b["c"]) - b["l"]
         floor = DEVIL_MARK_TOLERANZ  # Tag 20, absolut in Punkten
         if wick_oben <= floor:
-            raus.append({"seite": "oben", "preis": round(b["h"], 2), "et": b["et"].strftime("%m-%d %H:%M")})
+            raus.append({"seite": "oben", "preis": round(b["h"], 2), "et": b["et"].strftime(ZF)})
         if wick_unten <= floor:
-            raus.append({"seite": "unten", "preis": round(b["l"], 2), "et": b["et"].strftime("%m-%d %H:%M")})
+            raus.append({"seite": "unten", "preis": round(b["l"], 2), "et": b["et"].strftime(ZF)})
     return raus[-max_out:]
 
 
-def equal_levels(bars, max_out=5):
+def equal_levels(bars, max_out=5, live=()):
     """
     EQH/EQL und relative Equals -> Low Resistance Liquidity (Tag 7, Tag 16).
     Zaehlt nur, solange noch "nicht gesweept" (Tag 16) - ein Level, das
@@ -1193,7 +1522,7 @@ def equal_levels(bars, max_out=5):
                 # nirgends im Bootcamp.
                 preis_level = b
                 anzahl = len(reihe)
-                spaeter = bars[punkte[j]["i"] + 1 :]
+                spaeter = list(bars[punkte[j]["i"] + 1 :]) + list(live)
                 # Tag 7: zaehlt nur, solange "noch nicht gesweept".
                 schon_gesweept = (
                     any(s["h"] > preis_level for s in spaeter)
@@ -1211,7 +1540,7 @@ def equal_levels(bars, max_out=5):
                             # "gestackte" Form, die Tag 16 als Low Resistance
                             # Liquidity beschreibt.
                             "anzahl": anzahl,
-                            "et": punkte[j]["bar"]["et"].strftime("%m-%d %H:%M"),
+                            "et": punkte[j]["bar"]["et"].strftime(ZF),
                         }
                     )
         # Dieselbe Reihe wird von mehreren Startpunkten aus gefunden und
@@ -1230,7 +1559,7 @@ def equal_levels(bars, max_out=5):
 
 # ============================================================ Range / OTE
 
-def aktuelle_range(bars, spanne_swing=3):
+def aktuelle_range(bars, spanne_swing=3, live=()):
     """
     Fib nach Tag 11, woertlich:
     "Das Tool wird immer von Swing Low zu Swing High (oder umgekehrt) einer
@@ -1263,7 +1592,8 @@ def aktuelle_range(bars, spanne_swing=3):
     hi, lo = swings(bars, spanne_swing)
     if not hi or not lo:
         return None
-    preis = bars[-1]["c"]
+    alle = list(bars) + list(live)
+    preis = alle[-1]["c"]
 
     # Kandidaten: jeweils ein Swing Low mit einem SPAETEREN Swing High
     # (bullische Range) bzw. ein Swing High mit einem spaeteren Swing Low.
@@ -1301,13 +1631,34 @@ def aktuelle_range(bars, spanne_swing=3):
     verbraucht = []
 
     for extrem_i, start_i, bullisch, tief, hoch in kandidaten:
+        # Systemfestlegung (Frage an Salzmir, 23.09.): Ist der Preis nach dem
+        # Swing-Extrem schon darueber hinaus gelaufen, wird die Range bis zum
+        # neuen Extrem nachgezogen - auch wenn das noch kein bestaetigter
+        # Swing ist. Sonst liegt der Preis ausserhalb der Range (z.B. 121 %)
+        # und OTE/Golden Pocket sind wertlos (Tag 11: Fib nicht zu weit
+        # ansetzen).
+        unbestaetigt = False
+        rest = alle[extrem_i:]
+        if bullisch:
+            k = max(range(len(rest)), key=lambda x: rest[x]["h"])
+            if rest[k]["h"] > hoch + 1e-9:
+                hoch, extrem_i, unbestaetigt = rest[k]["h"], extrem_i + k, True
+                # Bedingung 2 erneut: kein tieferes Tief bis zum neuen Extrem
+                if min(x["l"] for x in alle[start_i : extrem_i + 1]) < tief - 1e-9:
+                    continue
+        else:
+            k = min(range(len(rest)), key=lambda x: rest[x]["l"])
+            if rest[k]["l"] < tief - 1e-9:
+                tief, extrem_i, unbestaetigt = rest[k]["l"], extrem_i + k, True
+                if max(x["h"] for x in alle[start_i : extrem_i + 1]) > hoch + 1e-9:
+                    continue
         spanne = hoch - tief
         if spanne <= 0:
             continue
         eq = (hoch + tief) / 2
         # Bedingung 3: ab dem Extrem pruefen, ob die Range schon bis
-        # Equilibrium zurueckkam. Ist sie das, gilt sie als verbraucht.
-        nach_extrem = bars[extrem_i:]
+        # Equilibrium zurueckkam (Wick genuegt, auch der laufenden Kerze).
+        nach_extrem = alle[extrem_i:]
         if bullisch:
             rebalanced = any(x["l"] <= eq for x in nach_extrem)
         else:
@@ -1342,8 +1693,9 @@ def aktuelle_range(bars, spanne_swing=3):
             "golden_pocket": round((ote_von + ote_bis) / 2, 2),
             "preis_bei_prozent": round(pos * 100, 1),
             "preis_in": "premium" if pos > 0.5 else "discount",
-            "start_et": bars[start_i]["et"].strftime("%m-%d %H:%M"),
-            "extrem_et": bars[extrem_i]["et"].strftime("%m-%d %H:%M"),
+            "start_et": alle[start_i]["et"].strftime(ZF),
+            "extrem_et": alle[extrem_i]["et"].strftime(ZF),
+            "extrem_unbestaetigt": unbestaetigt,
             "uebersprungene_ranges": verbraucht,
         }
     return None
@@ -1351,28 +1703,33 @@ def aktuelle_range(bars, spanne_swing=3):
 
 # ============================================================ Gaps / VWAP
 
-def opening_gaps(bars):
+def opening_gaps(bars, name=None):
     """
-    NWOG (Fr-Close -> So-Open) und NDOG (Tagesluecken), Tag 20.
+    NWOG und NDOG nach Tag 20: die Luecke zwischen dem Close vor der Pause und
+    dem Open danach. Ein NWOG gibt es nur, wenn es tatsaechlich eine Luecke
+    gibt (Close != Open) - so mit Salzmir am 23.09. festgelegt.
 
-    "gefuellt" (Tag 20: "werden im Grossteil der Faelle immer komplett
-    gefuellt") prueft KUMULATIV ueber alle Bars seit der Gap-Entstehung bis
-    zum aktuellen Datenrand - nicht nur eine einzelne Kerze und nicht nur
-    den ersten Tag danach. Eine Gap wird ueblicherweise ueber mehrere Kerzen
-    und teils mehrere Tage hinweg graduell zugelaufen: der tiefste Punkt und
-    der hoechste Punkt der Gap-Range muessen nicht in derselben Kerze
-    angefasst werden, damit die Gap als voll geschlossen gilt.
+    Close und Open sind auf jeder Timeframe dieselben Preise; gerechnet wird
+    auf den 30m-Kerzen, weil Yahoo bei 5m die erste Kerze nach dem Open oft
+    auslaesst (18:10 statt 18:00) - dann waere der "Open" nicht der Open.
+    Fehlt auch die 30m-Kerze um 18:00 ET, wird die Luecke als unsicher markiert.
+
+    NWOG = Luecke ueber ein Wochenende (auch mit Feiertag davor oder danach,
+    z.B. Labor Day: Freitag -> Dienstag). NDOG = Luecke zwischen zwei
+    Wochentagen. "gefuellt" kumulativ seit Entstehung (Tag 20: bleibt gueltig,
+    solange nicht KOMPLETT gefuellt). BTC handelt durchgehend - dort gibt es
+    keine Pause und damit kein NWOG/NDOG.
     """
+    if name in TAGESSCHNITT_UTC:
+        return None, [], []
     nwog_liste, ndog = [], []
-    # Tag 20 sagt zur Markierung ausdruecklich: "Auf dem 5-Minuten-Chart (High
-    # und Low der Sprung-Candle)." Auf 30m ist die Sprung-Candle sechsmal so
-    # breit, die Gap-Kanten liegen dadurch systematisch zu weit auseinander.
     tage = zu_tagen(bars)
     sortiert = sorted(tage.keys())
     for idx in range(1, len(sortiert)):
         vor, jetzt = tage[sortiert[idx - 1]], tage[sortiert[idx]]
         close = vor[-1]["c"]
-        open_ = jetzt[0]["o"]
+        erste = jetzt[0]
+        open_ = erste["o"]
         if abs(open_ - close) < 1e-9:
             continue
         lo, hi = min(close, open_), max(close, open_)
@@ -1383,12 +1740,16 @@ def opening_gaps(bars):
             "gefuellt": any(x["l"] <= lo for x in seither) and any(x["h"] >= hi for x in seither),
             "datum": sortiert[idx].isoformat(),
         }
-        # Wochenende: der Vortag war Freitag
-        if sortiert[idx - 1].weekday() == 4 and sortiert[idx].weekday() == 0:
-            # Tag 20: ein NWOG bleibt gueltig, solange es nicht KOMPLETT
-            # gefuellt ist. Die fruehere Version behielt nur das jeweils
-            # letzte - ein aelteres, noch offenes NWOG fiel damit unter den
-            # Tisch, obwohl es nach Tag 20 weiter als Level zaehlt.
+        if not (erste["et"].hour == 18 and erste["et"].minute == 0):
+            eintrag["unsicher"] = True
+            eintrag["unsicher_grund"] = (
+                f"erste Kerze erst um {erste['et'].strftime('%H:%M')} ET - Open nicht exakt belegt"
+            )
+        tage_dazwischen = (sortiert[idx] - sortiert[idx - 1]).days
+        wochenende = any(
+            (sortiert[idx - 1] + timedelta(days=k)).weekday() >= 5 for k in range(1, tage_dazwischen)
+        )
+        if wochenende:
             nwog_liste.append(eintrag)
         else:
             ndog.append(eintrag)
@@ -1397,27 +1758,23 @@ def opening_gaps(bars):
     return nwog, ndog[-3:], offene_nwog
 
 
-def vwap_seit_asia(bars):
+def vwap_tag(bars):
     """
-    VWAP ab Asia-Open (20:00 ET) des laufenden Handelstags (Tag 28).
-    Der Handelstag selbst startet schon um 18:00 ET - das Fenster 18:00-20:00
-    ET (vor Asia-Open) wird deshalb explizit rausgefiltert, sonst waere der
-    Anker zwei Stunden zu frueh.
+    VWAP nach Tag 28: "der volumengewichtete Durchschnittspreis, zu dem seit
+    Beginn der Asia Session (Tagesbeginn) tatsaechlich gehandelt wurde" und
+    "Standardformel beibehalten". Tag 20: die CME "oeffnet sonntags ca. 18 Uhr
+    Eastern mit der Asia Session". Der Standard-VWAP in TradingView ist an der
+    Session verankert, bei CME-Futures also 18:00 ET (bei BTC 00:00 UTC).
+    Die fruehere Version begann erst um 20:00 ET (Asia-Killzone).
     """
     if not bars:
         return None
     tag = handelstag(bars[-1])
-    heute = [
-        b for b in bars
-        if handelstag(b) == tag and not (18 <= b["et"].hour < 20)
-    ]
-    # Ohne echtes Volumen ist das kein VWAP mehr, sondern ein ungewichteter
-    # Durchschnitt. Tag 28 definiert VWAP ausdruecklich volumengewichtet, also
-    # muss dieser Fall sichtbar sein statt still eine Zahl zu liefern.
+    heute = [b for b in bars if handelstag(b) == tag]
     if not any(b["v"] > 0 for b in heute):
         return None
-    pv = sum(((b["h"] + b["l"] + b["c"]) / 3) * max(b["v"], 1) for b in heute)
-    vol = sum(max(b["v"], 1) for b in heute)
+    pv = sum(((b["h"] + b["l"] + b["c"]) / 3) * b["v"] for b in heute)
+    vol = sum(b["v"] for b in heute)
     return round(pv / vol, 2) if vol else None
 
 
@@ -1430,7 +1787,7 @@ def lade_news():
         return None
 
 
-def data_levels(bars5, news, max_out=6):
+def data_levels(bars5, news, max_out=6, bars5_zu=None):
     """
     Data High / Data Low nach Tag 7, Liquidity Pool 4, woertlich:
     "Highs/Lows, die direkt nach roten News (Forex Factory, z.B. CPI)
@@ -1466,11 +1823,12 @@ def data_levels(bars5, news, max_out=6):
         tief = min(fenster, key=lambda b: b["l"])
         # Tag 7: die Wicks der Reaktion sind der Pool. Der Status sagt, ob
         # das Level noch offen ist - gemessen wie ueberall sonst (Tag 3).
-        spaeter = [b for b in bars5 if b["et"] > fenster[-1]["et"]]
+        # Body Close nur auf geschlossenen Kerzen (Tag 3).
+        spaeter = [b for b in (bars5_zu if bars5_zu is not None else bars5) if b["et"] > fenster[-1]["et"]]
         raus.append(
             {
                 "termin": termin.get("titel"),
-                "zeit_et": zeit.strftime("%m-%d %H:%M"),
+                "zeit_et": zeit.strftime(ZF),
                 "data_high": round(hoch["h"], 2),
                 "data_low": round(tief["l"], 2),
                 "data_high_status": bruch_pruefen(spaeter, hoch["h"], "ueber")["status"],
@@ -1497,19 +1855,49 @@ def market_condition(bars):
 # ============================================================ Pro Symbol
 
 def auswerten(name, stand_utc=None):
-    bars = vielleicht_laden(name, "30m")
+    ser = SERIEN.get(name) or {}
+    bars = ser.get("30m") or []
     if len(bars) < 60:
         return {"fehler": "zu wenige 30m-Bars"}
 
-    # Struktur-Serien ohne die laufende Kerze (Tag 3), Live-Serien mit ihr.
-    bars_z = geschlossene(bars, 30, stand_utc)
-    laufende_kerze = len(bars_z) < len(bars)
-    if len(bars_z) < 60:
-        bars_z = bars
+    # Struktur-Serien ohne die laufende Kerze (Tag 3), Live-Kerzen getrennt.
+    # Massgeblich ist der letzte Tick der Serie, nicht der Abrufzeitpunkt (F2).
+    ende30 = datenende(name, "30m", stand_utc)
+    bars_z = geschlossene(bars, 30, ende30)
+    live30 = laufende(bars, bars_z)
+    laufende_kerze = bool(live30)
 
     tage = zu_tagen(bars)
     sortierte = sorted(tage.keys())
-    heute, abgeschlossen = sortierte[-1], sortierte[:-1]
+    letzter = sortierte[-1]
+    # F11: Ist der letzte Handelstag zum Stand schon vorbei (z.B. Samstag),
+    # dann ist er ein abgeschlossener Tag. "heute" ist dann der naechste
+    # Handelstag, fuer den es noch keine Kerzen gibt.
+    tag_zu = stand_utc is not None and stand_utc >= tag_ende(name, letzter)
+    if tag_zu:
+        abgeschlossen = sortierte
+        heute = letzter + timedelta(days=1)
+        if name not in TAGESSCHNITT_UTC:
+            while heute.weekday() >= 5:
+                heute += timedelta(days=1)
+        heute_bars = []
+    else:
+        abgeschlossen = sortierte[:-1]
+        heute = letzter
+        heute_bars = tage[heute]
+
+    # M1: Markt an einem Wochentag geschlossen (CME-Feiertag)?
+    markt_geschlossen = None
+    if stand_utc is not None and name not in TAGESSCHNITT_UTC:
+        jetzt = {"t": stand_utc, "et": stand_utc.astimezone(ET)}
+        erwartet = handelstag(jetzt)
+        start_erwartet = datetime(erwartet.year, erwartet.month, erwartet.day, 18, tzinfo=ET) - timedelta(days=1)
+        if (erwartet.weekday() < 5 and erwartet > letzter
+                and stand_utc > (start_erwartet + timedelta(hours=1)).astimezone(timezone.utc)):
+            markt_geschlossen = {
+                "handelstag": erwartet.isoformat(),
+                "hinweis": "Fuer diesen Handelstag gibt es keine Kerzen - vermutlich CME-Feiertag. Kein Bias auf alten Kerzen schreiben.",
+            }
 
     tages_hl = {t.isoformat(): hl(tage[t]) for t in abgeschlossen[-TAGE:]}
     wochen_roh = {}
@@ -1518,9 +1906,10 @@ def auswerten(name, stand_utc=None):
     laufend = handelswoche(heute)
     wochen_hl = {
         w.isoformat(): hl(v)
-        for w, v in sorted(wochen_roh.items())[-WOCHEN:]
+        for w, v in sorted(wochen_roh.items())
         if w != laufend
     }
+    wochen_hl = dict(list(wochen_hl.items())[-WOCHEN:])
 
     pd_key = sorted(tages_hl)[-1] if tages_hl else None
     pw_key = sorted(wochen_hl)[-1] if wochen_hl else None
@@ -1529,36 +1918,35 @@ def auswerten(name, stand_utc=None):
     pwh = wochen_hl[pw_key]["high"] if pw_key else None
     pwl = wochen_hl[pw_key]["low"] if pw_key else None
 
-    heute_bars = tage[heute]
-    # Asia/London/NY-AM sind Futures-Handelssessions (CME-Handelszeiten).
-    # XAU/BTC handeln durchgehend ohne solche Sessions - fuer diese beiden
-    # wird das Konzept deshalb gar nicht erst berechnet, statt Zahlen
-    # auszugeben, die dort nichts bedeuten (siehe SYMBOLE_OHNE_SESSIONS).
     hat_sessions = name not in SYMBOLE_OHNE_SESSIONS
-    if hat_sessions:
+    if hat_sessions and heute_bars:
         asia = hl([b for b in heute_bars if in_fenster(b, 20, 0, 0, 0)])
         london = hl([b for b in heute_bars if in_fenster(b, 2, 0, 6, 0)])
         ny_am = hl([b for b in heute_bars if in_fenster(b, 9, 30, 11, 0)])
     else:
         asia = london = ny_am = None
 
-    # Fuer PO3 (Tag 23): welches Extrem kam zuerst? Nicht raten (Naehe zum
-    # Open), sondern am tatsaechlichen Zeitpunkt der Kerze festmachen, sonst
-    # rutscht die Form leicht ins Falsche.
-    hi_bar = max(heute_bars, key=lambda b: b["h"]) if heute_bars else None
-    lo_bar = min(heute_bars, key=lambda b: b["l"]) if heute_bars else None
+    b15 = ser.get("15m") or []
+    b5 = ser.get("5m") or []
+    b15_z = geschlossene(b15, 15, datenende(name, "15m", stand_utc))
+    b5_z = geschlossene(b5, 5, datenende(name, "5m", stand_utc))
+    live15, live5 = laufende(b15, b15_z), laufende(b5, b5_z)
+    heute_5m_alle = [b for b in b5 if handelstag(b) == heute]
+
+    # PO3 (Tag 23): welches Extrem kam zuerst? Aus den 5m-Kerzen, damit Hoch
+    # und Tief nicht in derselben Kerze liegen (bei 30m wurde dann geraten).
+    zeit_basis = heute_5m_alle if heute_5m_alle else heute_bars
+    hi_bar = max(zeit_basis, key=lambda b: b["h"]) if zeit_basis else None
+    lo_bar = min(zeit_basis, key=lambda b: b["l"]) if zeit_basis else None
     po3_form = None
     if hi_bar and lo_bar:
-        po3_form = (
-            "OHLC (bearische Manipulation zuerst nach oben)"
-            if hi_bar["t"] < lo_bar["t"]
-            else "OLHC (bullische Manipulation zuerst nach unten)"
-        )
+        if hi_bar["t"] == lo_bar["t"]:
+            po3_form = "unklar (Hoch und Tief in derselben 5m-Kerze)"
+        elif hi_bar["t"] < lo_bar["t"]:
+            po3_form = "OHLC (bearische Manipulation zuerst nach oben)"
+        else:
+            po3_form = "OLHC (bullische Manipulation zuerst nach unten)"
 
-    # Previous Month High/Low. Tag 25 nennt unter den wichtigsten Konfluenzen
-    # ausdruecklich "Previous Day/Week/MONTH High/Low" - der Monat fehlte
-    # bisher komplett. Der Monat wird ueber den Handelstag zugeordnet, damit
-    # er denselben Sessionschnitt hat wie PDH/PDL und PWH/PWL.
     monate_roh = {}
     for t in abgeschlossen:
         monate_roh.setdefault((t.year, t.month), []).extend(tage[t])
@@ -1578,166 +1966,292 @@ def auswerten(name, stand_utc=None):
             "asia_low": asia["low"] if asia else None,
             "london_high": london["high"] if london else None,
             "london_low": london["low"] if london else None,
-            # Tag 7, Pool 1: "Jede Session (Asia, London, New York)
-            # hinterlaesst ein High und ein Low - starke Liquidity Pools."
-            # New York fehlte bisher in den Key Levels, obwohl der typische
-            # Ablauf im Bootcamp ausdruecklich ueber das London High in die
-            # NY-Session laeuft. Vor 11:00 ET ist die NY-AM-Session noch
-            # nicht fertig; dann steht hier der Stand bis jetzt, und
-            # level_status prueft erst ab Ende des Fensters auf einen Bruch.
             "ny_am_high": ny_am["high"] if ny_am else None,
             "ny_am_low": ny_am["low"] if ny_am else None,
         })
 
-    b15_roh = vielleicht_laden(name, "15m")
-    b5_roh = vielleicht_laden(name, "5m")
-    b15 = geschlossene(b15_roh, 15, stand_utc)
-    b5 = geschlossene(b5_roh, 5, stand_utc)
-
-    # Welche Levels hat der heutige Handelstag angefasst, und wie?
-    #
-    # Der Body Close wird nur auf GESCHLOSSENEN 30m-Kerzen bestimmt (Tag 3).
-    # Zusaetzlich laeuft dieselbe Pruefung auf 5m als Gegenprobe: ein Wick,
-    # der innerhalb einer 30m-Kerze liegt, ist auf 30m nicht sichtbar. Weichen
-    # beide voneinander ab, steht das als "abweichung_5m" im Ergebnis, statt
-    # still unterzugehen.
-    heute_bars_z = [b for b in bars_z if handelstag(b) == heute]
-    heute_5m = [b for b in b5 if handelstag(b) == heute]
-
     def ab_wann(bars_liste, level_name):
-        """
-        Ab welcher Bar darf ueberhaupt auf einen Bruch geprueft werden?
-
-        PDH/PDL/PWH/PWL/PMH/PML stehen beim Start des Handelstags schon fest,
-        da zaehlt der ganze Tag. Ein Session-High/-Low entsteht dagegen erst
-        WAEHREND des Tages - das Asia Low gibt es erst nach 00:00 ET, das
-        London Low erst nach 06:00 ET. Die fruehere Version prueft den
-        gesamten Handelstag ab 18:00 ET und meldete dadurch Bruechen zu
-        Zeitpunkten, an denen das Level noch gar nicht existierte (z.B.
-        "London Low um 18:00 gebrochen", vier Stunden vor London).
-        """
-        fenster = {
-            "asia": (20, 0, 0, 0),
-            "london": (2, 0, 6, 0),
-            "ny_am": (9, 30, 11, 0),
-        }
+        """Ein Session-Level existiert erst nach seiner Session (Tag 7)."""
+        fenster = {"asia": (20, 0, 0, 0), "london": (2, 0, 6, 0), "ny_am": (9, 30, 11, 0)}
         for praefix, w in fenster.items():
             if level_name.startswith(praefix):
                 letzte = [i for i, b in enumerate(bars_liste) if in_fenster(b, *w)]
                 return (letzte[-1] + 1) if letzte else len(bars_liste)
         return 0
 
+    heute30_z = [b for b in bars_z if handelstag(b) == heute]
+    heute30_live = [b for b in live30 if handelstag(b) == heute]
+    heute5_z = [b for b in b5_z if handelstag(b) == heute]
+    heute5_live = [b for b in live5 if handelstag(b) == heute]
+    woche_tage = [t for t in sortierte if handelswoche(t) == laufend]
+    monat_tage = [t for t in sortierte if (t.year, t.month) == laufender_monat]
+
     status = {}
     for k, lv in key_levels.items():
         if lv is None:
             continue
         richtung = "ueber" if k.endswith("h") or k.endswith("high") else "unter"
-        basis = heute_bars_z or heute_bars
-        start = ab_wann(basis, k)
-        eintrag = {"level": lv, **bruch_pruefen(basis, lv, richtung, ab_index=start)}
-        if heute_5m:
-            gegen = bruch_pruefen(heute_5m, lv, richtung, ab_index=ab_wann(heute_5m, k))
-            if gegen["status"] != eintrag["status"]:
-                eintrag["abweichung_5m"] = gegen["status"]
-        # Liegt die gerade laufende 30m-Kerze jenseits des Levels? Das ist
-        # noch kein Bruch (Tag 3), aber es soll sichtbar sein.
-        if laufende_kerze and heute_bars:
-            live = heute_bars[-1]
-            jenseits = live["h"] > lv if richtung == "ueber" else live["l"] < lv
-            if jenseits and eintrag["status"] == "unberuehrt":
-                eintrag["laufende_kerze_jenseits"] = True
+        s30 = status_mit_live(heute30_z[ab_wann(heute30_z, k):], heute30_live, lv, richtung)
+        eintrag = {"level": lv, **s30}
+        if b5:
+            s5 = status_mit_live(heute5_z[ab_wann(heute5_z, k):], heute5_live, lv, richtung)
+            eintrag["status_5m"] = s5["status"]
+            for feld in ("sweep_et", "erster_sweep_et", "zeit_et"):
+                if feld in s5:
+                    eintrag[f"{feld}_5m"] = s5[feld]
+            if s5["status"] != s30["status"]:
+                eintrag["abweichung_5m"] = s5["status"]
+        # F12: Weekly- und Monthly-Levels gelten ab Wochen- bzw. Monatsbeginn.
+        # Wurde die PWH am Montag genommen, ist sie am Dienstag nicht mehr
+        # "unberuehrt", auch wenn der heutige Tag sie nicht beruehrt hat.
+        if k in ("pwh", "pwl", "pmh", "pml"):
+            seit = woche_tage if k in ("pwh", "pwl") else monat_tage
+            seit_bars = [b for b in bars_z if handelstag(b) in seit]
+            seit_live = [b for b in live30 if handelstag(b) in seit]
+            ss = status_mit_live(seit_bars, seit_live, lv, richtung)
+            eintrag["status_seit_entstehung"] = ss["status"]
+            for feld in ("sweep_et", "erster_sweep_et", "zeit_et"):
+                if feld in ss:
+                    eintrag[f"{feld}_seit_entstehung"] = ss[feld]
+        else:
+            eintrag["status_seit_entstehung"] = s30["status"]
         status[k] = eintrag
 
-    # 1h/4h/1d: bei XAU/BTC aus einer eigenen, lange zurueckreichenden
-    # 1h-Serie statt aus den auf 60 Tage gedeckelten 30m-Bars (htf_kerzen()).
-    b1h, b4h, b1d = htf_kerzen(name, bars, bars_z, stand_utc)
+    b1h, b1h_alle, b4h, b4h_alle, b1d = htf_kerzen(name, bars, stand_utc)
+    live1h, live4h = laufende(b1h_alle, b1h), laufende(b4h_alle, b4h)
+    live1d = []
+    if heute_bars:
+        live1d = [{"t": heute_bars[0]["t"], "et": heute_bars[0]["et"], "o": heute_bars[0]["o"],
+                   "h": max(b["h"] for b in heute_bars), "l": min(b["l"] for b in heute_bars),
+                   "c": heute_bars[-1]["c"], "v": 0}]
 
-    # Tag 20: NWOG/NDOG werden auf dem 5-Minuten-Chart markiert.
-    nwog, ndog, offene_nwog = opening_gaps(b5 if len(b5) > 100 else bars)
+    nwog, ndog, offene_nwog = opening_gaps(bars, name)
 
-    # HTF-FVGs erst berechnen, weil sie sowohl in die Ausgabe gehen als auch
-    # als moegliche Sponsoren fuer die LTF-FVGs dienen (Tag 22: ab 30m,
-    # Tag 12 ausdruecklich "auch Daily/Weekly").
-    fvg1d = finde_fvgs(b1d) if len(b1d) >= 5 else []
-    fvg4h = finde_fvgs(b4h[-120:])
-    fvg1h = finde_fvgs(b1h[-240:])
-    fvg30 = finde_fvgs(bars_z[-480:])
+    # HTF-FVGs (Tag 9/12/22). 1d und 4h ueber die ganze Historie (Januar-
+    # Fehler), 1h ueber 90 Tage, 30m ueber 10 Tage. Alle unmediated bleiben.
+    b1h_fenster = b1h[-(90 * 23):]
+    b30_fenster = bars_z[-480:]
+    fvg1d = finde_fvgs(b1d, live1d, None) if len(b1d) >= 5 else []
+    fvg4h = finde_fvgs(b4h, live4h, 240)
+    fvg1h = finde_fvgs(b1h_fenster, live1h, 60)
+    fvg30 = finde_fvgs(b30_fenster, live30, 30)
     htf_zonen = [
-        {"tf": tf, "von": f["von"], "bis": f["bis"]}
+        {"tf": tf, "von": f["von"], "bis": f["bis"], "_t_entstanden": f["_t_entstanden"],
+         "_t_ifvg": f["_t_ifvg"]}
         for tf, liste in (("1d", fvg1d), ("4h", fvg4h), ("1h", fvg1h), ("30m", fvg30))
         for f in liste
     ]
 
-    fvg15 = markiere_sponsorship(finde_fvgs(b15[-600:]), b15, htf_zonen, key_levels) if b15 else []
-    fvg5 = markiere_sponsorship(finde_fvgs(b5[-900:]), b5, htf_zonen, key_levels) if b5 else []
+    zeitachse = Zeitachse(name, bars)
+    b15s = b15_z[-600:]
+    b5s = b5_z[-900:]
+    fvg15 = markiere_sponsorship(finde_fvgs(b15s, live15, 15), b15s, htf_zonen, zeitachse) if b15 else []
+    fvg5 = markiere_sponsorship(finde_fvgs(b5s, live5, 5), b5s, htf_zonen, zeitachse) if b5 else []
 
-    return {
+    if heute_5m_alle:
+        manip = manipulations_leg(name, heute_5m_alle, b5_z, zeitachse, htf_zonen, "5m")
+    else:
+        manip = manipulations_leg(name, heute_bars, bars_z, zeitachse, htf_zonen, "30m (5m fehlt)")
+    profil = daily_profile_berechnen(name, heute, heute_bars, asia, london, ny_am, zeitachse, htf_zonen) if hat_sessions else None
+
+    ergebnis = {
         "preis": round(bars[-1]["c"], 2),
-        "letzte_bar_et": bars[-1]["et"].strftime("%Y-%m-%d %H:%M"),
+        "letzte_bar_et": bars[-1]["et"].strftime(ZF),
+        # Fehlt die Pseudo-Kerze (kein letzter Tick), reichen die Daten
+        # hoechstens bis zum Ende der letzten echten Kerze - nicht bis zum
+        # Abrufzeitpunkt (sonst sieht ein alter Stand frisch aus).
+        "datenende_utc": min(
+            [x for x in (ende30, bars[-1]["t"] + timedelta(minutes=30)) if x is not None]
+        ).strftime("%Y-%m-%d %H:%M"),
         "handelstag": heute.isoformat(),
+        "handelstag_hat_kerzen": bool(heute_bars),
+        "markt_geschlossen": markt_geschlossen,
         "key_levels": key_levels,
         "level_status": status,
         "pd_datum": pd_key,
         "pm_monat": f"{pm_key[0]}-{pm_key[1]:02d}" if pm_key else None,
         "pw_woche_ab": pw_key,
         "heute_bisher": hl(heute_bars),
-        "heute_high_zeit_et": hi_bar["et"].strftime("%m-%d %H:%M") if hi_bar else None,
-        "heute_low_zeit_et": lo_bar["et"].strftime("%m-%d %H:%M") if lo_bar else None,
+        "heute_high_zeit_et": hi_bar["et"].strftime(ZF) if hi_bar else None,
+        "heute_low_zeit_et": lo_bar["et"].strftime(ZF) if lo_bar else None,
         "po3_form": po3_form,
-        # Stacked PO3 baut auf dem NY-AM-Fenster auf (09:30-11:00 ET) - bei
-        # XAU/BTC gibt es das genauso wenig wie die anderen Sessions.
-        "stacked_po3": stacked_po3(b15, key_levels, htf_zonen, heute) if hat_sessions else None,
-        # Bei XAU/BTC bewusst kein sessions_heute-Feld (siehe hat_sessions
-        # oben) statt eines mit Nullen gefuellten Blocks, der eine Session
-        # vortaeuscht, die es dort nicht gibt.
+        "stacked_po3": stacked_po3(b15, zeitachse, htf_zonen, heute) if hat_sessions else None,
         **({"sessions_heute": {"asia": asia, "london": london, "ny_am": ny_am}} if hat_sessions else {}),
         "tage": tages_hl,
         "wochen": wochen_hl,
         "laufende_kerze_ausgeschlossen": laufende_kerze,
-        # Top-down nach Tag 27 beginnt bei Daily, nicht bei 4h.
         "trend_1d": trend(b1d) if len(b1d) >= 8 else None,
         "trend_4h": trend(b4h),
         "trend_1h": trend(b1h),
         "trend_30m": trend(bars_z),
-        # Top-down nach Tag 27 (4h -> 1h -> 30m). "Higher Timeframe holds
-        # higher power": die 4h-Range ist die uebergeordnete, die 30m-Range
-        # die, in der der Entry gesucht wird.
-        # BOS/MSS als Ereignisse (Tag 4): die Abfolge, nicht nur das Label.
         "struktur_1d": strukturereignisse(b1d) if len(b1d) >= 8 else [],
         "struktur_4h": strukturereignisse(b4h),
         "struktur_1h": strukturereignisse(b1h),
         "struktur_30m": strukturereignisse(bars_z),
-        "range_ote": aktuelle_range(bars_z),
-        "range_ote_1h": aktuelle_range(b1h),
-        "range_ote_4h": aktuelle_range(b4h),
-        # Auf Tagesebene sind die Swings gruber, deshalb reicht hier eine
-        # kleinere Spanne, sonst bleiben bei ~40 Tageskerzen keine uebrig.
-        "range_ote_1d": aktuelle_range(b1d, spanne_swing=2) if len(b1d) >= 12 else None,
+        "range_ote": aktuelle_range(bars_z, live=live30),
+        "range_ote_1h": aktuelle_range(b1h, live=live1h),
+        "range_ote_4h": aktuelle_range(b4h, live=live4h),
+        "range_ote_1d": aktuelle_range(b1d, spanne_swing=2, live=live1d) if len(b1d) >= 12 else None,
         "fvg_1d": ohne_intern(fvg1d),
         "fvg_4h": ohne_intern(fvg4h),
         "fvg_1h": ohne_intern(fvg1h),
         "fvg_30m": ohne_intern(fvg30),
-        "fvg_15m": fvg15,
-        "fvg_5m": fvg5,
+        "fvg_15m": ohne_intern(fvg15),
+        "fvg_5m": ohne_intern(fvg5),
         "ith_itl": (
-            intermediate_levels(b1d, "1d")
-            + intermediate_levels(b4h[-120:], "4h")
-            + intermediate_levels(b1h[-240:], "1h")
-            + intermediate_levels(bars_z[-480:], "30m")
+            intermediate_levels(b1d, "1d", None, live=live1d)
+            + intermediate_levels(b4h, "4h", 240, live=live4h)
+            + intermediate_levels(b1h_fenster, "1h", 60, live=live1h)
+            + intermediate_levels(b30_fenster, "30m", 30, live=live30)
         ),
-        "rejection_blocks_30m": rejection_blocks(bars_z[-240:], key_levels, htf_zonen),
-        # Tag 20 / W3: nur fuer NQ und ES definiert. Bei XAU/BTC steht hier
-        # null, damit im Bias klar ist, dass das Konzept dort nicht gilt -
-        # statt einer Zahl, die das Bootcamp nicht deckt.
+        "rejection_blocks_30m": rejection_blocks(bars_z[-240:], zeitachse, htf_zonen),
         "devil_marks_30m": devil_marks(bars_z[-120:], name),
-        "equal_levels_1h": equal_levels(b1h[-160:]),
+        "equal_levels_1h": equal_levels(b1h[-160:], live=live1h),
         "nwog": nwog,
         "offene_nwog": offene_nwog,
         "ndog": ndog,
-        "vwap": vwap_seit_asia(bars),
+        "vwap": vwap_tag(bars),
         "market_condition": market_condition(bars_z),
-        # Tag 7, Pool 4: Data High/Low aus den roten USD-News.
-        "data_levels": data_levels(b5, lade_news()),
+        "data_levels": data_levels(b5, lade_news(), bars5_zu=b5_z),
+        "manipulations_leg": manip,
+    }
+    if profil is not None:
+        ergebnis["daily_profile"] = profil
+    return ergebnis
+
+
+def manipulations_leg(name, heute_kerzen, zu_kerzen, zeitachse, htf_zonen, basis="5m"):
+    """
+    Das Manipulations-Leg des Handelstags (Systemfestlegung, im Register):
+    vom Tages-Open (18:00 ET) bis zu dem Extrem, das ZUERST gedruckt wurde -
+    bei OLHC also bis zum bisherigen Tagestief. Tag 23 beschreibt PO3 an
+    Kerzen von 15m bis 4h; die Anwendung auf die Tageskerze ist eine
+    Festlegung dieses Systems, keine woertliche Bootcamp-Regel.
+
+    Manipulation = Bewegung in ein HTF Key Level ODER Liquidity Sweep (Tag 19).
+    Gezaehlt wird nur, was IN diesem Leg passiert (F5):
+      - Sweep: ein Level, das schon zu Leg-Beginn existierte, wird im Leg nur
+        gewickt (5m), und bis zum Leg-Ende nicht mit Body Close gebrochen
+        (Body Close nur auf geschlossenen Kerzen, Tag 3).
+      - Tap: ein HTF-FVG (1d/4h/1h/30m), das schon zu Leg-Beginn existierte
+        und bis zum Leg-Ende nicht invertiert war, wird vom Leg erreicht.
+        Das FVG muss dabei jenseits des Opens liegen (Bewegung HINEIN).
+    zu_kerzen: geschlossene Kerzen fuer die Bruch-Pruefung. basis sagt, auf
+    welcher Timeframe gemessen wurde ("5m", oder "30m" wenn 5m fehlt).
+    """
+    if not heute_kerzen:
+        return None
+    start = heute_kerzen[0]
+    hoch = max(heute_kerzen, key=lambda b: b["h"])
+    tief = min(heute_kerzen, key=lambda b: b["l"])
+    if hoch["t"] == tief["t"]:
+        return {"hinweis": "Hoch und Tief in derselben Kerze - Leg nicht bestimmbar"}
+    runter = tief["t"] < hoch["t"]
+    ende = tief if runter else hoch
+    leg = [b for b in heute_kerzen if start["t"] <= b["t"] <= ende["t"]]
+    # Nur geschlossene Kerzen koennen einen Body Close liefern (Tag 3) - kein
+    # Rueckfall auf die laufende Kerze.
+    leg_z = [b for b in zu_kerzen if start["t"] <= b["t"] <= ende["t"]]
+    extrem = ende["l"] if runter else ende["h"]
+
+    # Nur Levels, die zu Leg-Beginn schon existierten (Festlegung W6) - nicht
+    # die Session-Levels, die erst im Leg selbst entstehen.
+    levels_start = zeitachse.levels(start["t"])
+    sweeps = []
+    for b in leg:
+        for lname, lv in levels_start.items():
+            ist_low = not (lname.endswith("h") or lname.endswith("high"))
+            if runter != ist_low or lname in sweeps:
+                continue
+            if (runter and b["l"] < lv) or (not runter and b["h"] > lv):
+                nach = [x for x in leg_z if x["t"] >= b["t"]]
+                gebrochen = any((x["c"] < lv) if runter else (x["c"] > lv) for x in nach)
+                if not gebrochen:
+                    sweeps.append(lname)
+    taps = []
+    for z in htf_zonen:
+        if z["_t_entstanden"] > start["t"]:
+            continue
+        if z["_t_ifvg"] is not None and z["_t_ifvg"] <= ende["t"]:
+            continue
+        if runter and z["bis"] < start["o"] and extrem <= z["bis"]:
+            taps.append(f"{z['tf']}-FVG {z['von']}-{z['bis']}")
+        elif not runter and z["von"] > start["o"] and extrem >= z["von"]:
+            taps.append(f"{z['tf']}-FVG {z['von']}-{z['bis']}")
+    if name in TAGESSCHNITT_UTC:
+        start_ok = start["t"].hour == 0 and start["t"].minute == 0
+    else:
+        start_ok = start["et"].hour == 18 and start["et"].minute == 0
+    raus = {
+        "richtung": "nach unten" if runter else "nach oben",
+        "basis": basis,
+        "start_et": start["et"].strftime(ZF),
+        "ende_et": ende["et"].strftime(ZF),
+        "open": round(start["o"], 2),
+        "extrem": round(extrem, 2),
+        "sweeps": sweeps,
+        "fvg_taps": taps,
+        "hat_manipuliert": bool(sweeps or taps),
+    }
+    if not start_ok:
+        raus["start_unsicher"] = (
+            f"erste Kerze des Tages erst um {start['et'].strftime('%H:%M')} ET - "
+            "Tages-Open nicht exakt belegt"
+        )
+    return raus
+
+
+def daily_profile_berechnen(name, heute, heute_bars, asia, london, ny, zeitachse, htf_zonen):
+    """
+    Daily Profile nach Tag 19, woertlich:
+      1: London/Asia bewegt sich seitwaerts, NY AM manipuliert in ein HTF Key
+         Level (bildet Low/High of Day) und distributed.
+      2: London manipuliert bereits in ein HTF Key Level und reversed dort
+         (bildet Low/High of Day), NY AM setzt fort.
+      3: London bewegt sich ohne HTF-Key-Level-Tap stark (Judas), NY
+         manipuliert und reversed.
+    F6/B7: Als "getappt" zaehlen nur Levels und HTF-FVGs, die VOR London
+    existierten (nicht die, die London selbst gebildet hat), und fuer Profil 2
+    muss London das bisherige Tageshoch bzw. -tief gebildet haben. Der Asia-
+    Sweep steht getrennt (sonst waere Profil 3 unerreichbar).
+    """
+    if not (asia and london):
+        return {"profil": "noch nicht bestimmbar"}
+    lb = [b for b in heute_bars if in_fenster(b, 2, 0, 6, 0)]
+    if not lb:
+        return {"profil": "noch nicht bestimmbar"}
+    lstart = lb[0]["t"]
+    vor_london = {k: v for k, v in zeitachse.levels(lstart).items() if not k.startswith(("asia", "london", "ny_am"))}
+    pools = [n for n, v in vor_london.items() if london["low"] <= v <= london["high"]]
+    zonen = [
+        f"{z['tf']}-FVG {z['von']}-{z['bis']}"
+        for z in zonen_zum_zeitpunkt(htf_zonen, lstart)
+        if london["low"] <= z["bis"] and london["high"] >= z["von"]
+    ]
+    getappt = pools + zonen
+    london_sweep_asia = london["high"] > asia["high"] or london["low"] < asia["low"]
+    tag_hoch = max(b["h"] for b in heute_bars)
+    tag_tief = min(b["l"] for b in heute_bars)
+    london_hod = abs(london["high"] - tag_hoch) < 1e-9
+    london_lod = abs(london["low"] - tag_tief) < 1e-9
+
+    if not london_sweep_asia and not getappt:
+        p = "1: London/Asia Accumulation -> NY Manipulation & Distribution (vorlaeufig bis NY AM)"
+    elif getappt and (london_hod or london_lod):
+        p = "2: London Reversal + NY Continuation (London hat ein HTF Key Level getappt und das Tageshoch/-tief gebildet)"
+    elif getappt:
+        p = "offen: London hat ein HTF Key Level getappt, aber weder Tageshoch noch Tagestief gebildet"
+    else:
+        p = "3: London Judas + NY Reversal (Bewegung ohne HTF-Key-Level-Tap, vorlaeufig bis NY AM)"
+    return {
+        "profil": p,
+        "london_hat_asia_gesweept": london_sweep_asia,
+        "london_hat_htf_key_level_getappt": getappt,
+        "london_bildet_tageshoch": london_hod,
+        "london_bildet_tagestief": london_lod,
+        "asia_spanne": round(asia["high"] - asia["low"], 2),
+        "london_spanne": round(london["high"] - london["low"], 2),
+        "ny_am_bisher": ny,
     }
 
 
@@ -1745,195 +2259,62 @@ def auswerten(name, stand_utc=None):
 
 def smt_vergleich(nq, es, a_name="nq", b_name="es"):
     """
-    SMT (Tag 13): reine Liquiditaets-Sweep-Divergenz - eine Seite sweept ein
-    Level (nur Wick), die andere beruehrt es ueberhaupt nicht. Ein
-    struktureller Bruch (Body Close) auf einer Seite ist KEIN SMT, auch wenn
-    die andere Seite das Level nicht angefasst hat - das ist einfach die
-    staerkere Seite, keine Manipulation.
+    SMT (Tag 13): Divergenz - eine Seite sweept ein Level (nur Wick), die
+    andere beruehrt es gar nicht. Gemessen auf 5m-Kerzen (Systemfestlegung mit
+    Salzmir, 23.09.; Tag 13: "SMTs treten auf dem 5-Minuten-Chart am
+    haeufigsten auf"). Ein Body Close auf einer Seite ist KEIN SMT.
 
-    True Manipulation (Tag 24): beide Pairs sweepen jeweils ein HTF-Key-Level.
-    Muss nicht dasselbe benannte Level sein - "hoeher oder tiefer zaehlt
-    auch" steht explizit im Bootcamp, deshalb hier als Kreuzvergleich ueber
-    alle Levels beider Seiten statt nur gleicher Key.
+    True Manipulation (Tag 24): BEIDE Pairs manipulieren in ein HTF Key Level,
+    nicht zwingend dasselbe - und zwar im selben Manipulations-Leg des Tages
+    (Systemfestlegung mit Salzmir, 23.09.; Tag 24: "beide Pairs sollen an
+    einem Punkt sein, an dem eine Distribution/ein Reversal erwartet werden kann").
     """
     nq_status = nq.get("level_status", {})
     es_status = es.get("level_status", {})
-    raus = {"smt": [], "true_manipulation": [], "beide_gebrochen": []}
+    raus = {"smt": [], "true_manipulation": [], "beide_gebrochen": [], "divergenz_kein_smt": [],
+            "messbasis": "5m-Kerzen (status_5m)"}
 
     for k in nq_status:
         a, b = nq_status.get(k), es_status.get(k)
         if not a or not b:
             continue
-        sa, sb = a["status"], b["status"]
-        if (sa == "sweep") != (sb == "sweep") and "unberuehrt" in (sa, sb):
+        sa, sb = a.get("status_5m"), b.get("status_5m")
+        if sa is None or sb is None:
+            # Ohne 5m-Messung keine SMT-Aussage (Festlegung W5).
+            raus.setdefault("nicht_messbar_5m", []).append(k)
+            continue
+        if {sa, sb} == {"sweep", "unberuehrt"}:
             raus["smt"].append(
-                {
-                    "level": k,
-                    a_name: sa,
-                    b_name: sb,
-                    "voraus": a_name.upper() if sa == "sweep" else b_name.upper(),
-                }
+                {"level": k, a_name: sa, b_name: sb,
+                 "voraus": a_name.upper() if sa == "sweep" else b_name.upper()}
             )
-        elif sa != "unberuehrt" and sb != "unberuehrt" and (sa == "body_close" or sb == "body_close"):
-            # Mindestens eine Seite mit Body Close durch -> struktureller Bruch, keine Manipulation
+        elif sa != "unberuehrt" and sb != "unberuehrt" and "body_close" in (sa, sb):
             raus["beide_gebrochen"].append({"level": k, a_name: sa, b_name: sb})
         elif {sa, sb} == {"body_close", "unberuehrt"}:
-            # Eine Seite bricht strukturell durch, die andere fasst das Level
-            # gar nicht an. Das ist nach Tag 13 KEIN SMT (SMT verlangt einen
-            # Sweep, also nur einen Wick), fiel bisher aber komplett unter den
-            # Tisch. Es wird hier ausgewiesen, damit es im Bias nicht
-            # faelschlich als SMT auftaucht - und auch nicht uebersehen wird.
-            raus.setdefault("divergenz_kein_smt", []).append(
-                {
-                    "level": k,
-                    a_name: sa,
-                    b_name: sb,
-                    "warum_kein_smt": (
-                        "Tag 13: SMT ist eine Sweep-Divergenz (nur Wick). Hier "
-                        "liegt auf einer Seite ein Body Close vor, das ist ein "
-                        "struktureller Bruch, keine Manipulation."
-                    ),
-                }
+            raus["divergenz_kein_smt"].append(
+                {"level": k, a_name: sa, b_name: sb,
+                 "warum_kein_smt": "Tag 13: SMT ist eine Sweep-Divergenz (nur Wick). Ein Body Close ist ein Bruch, keine Manipulation."}
             )
 
-    def seite(level_name):
-        """Buyside liegt ueber Highs, Sellside unter Lows (Tag 6)."""
-        return "buyside" if level_name.endswith(("h", "high")) else "sellside"
-
-    # --- True Manipulation (Tag 24) ---
-    #
-    # Tag 24: "beide Pairs manipulieren in ein High Timeframe Key Level".
-    # Was "manipulieren" heisst, steht in Tag 19: "Bewegung in ein
-    # High-Timeframe-Key-Level BZW. Liquidity Sweep" - also beides.
-    #
-    # Die fruehere Version zaehlte ausschliesslich Sweeps benannter Key
-    # Levels. Ein Tag, an dem beide Pairs sauber in ein 4h- oder Daily-FVG
-    # getappt haben, war damit nie True Manipulation, obwohl Tag 19 genau das
-    # als Manipulation definiert. Gleichzeitig pruefte daily_profile dieselbe
-    # Frage anders. Beide nutzen jetzt manipulation_belege().
-    a_sweeps = [k for k, v in nq_status.items() if v["status"] == "sweep"]
-    b_sweeps = [k for k, v in es_status.items() if v["status"] == "sweep"]
-
-    a_belege = manipulation_belege(nq, *manipulations_fenster(nq), a_sweeps)
-    b_belege = manipulation_belege(es, *manipulations_fenster(es), b_sweeps)
-
-    if a_belege and b_belege:
-        # Die Seite (buyside/sellside) laesst sich nur fuer benannte Pools
-        # bestimmen - ein FVG-Tap hat keine Seite im Sinne von Tag 6.
-        a_seiten = sorted({seite(k) for k in a_sweeps})
-        b_seiten = sorted({seite(k) for k in b_sweeps})
+    ma, mb = nq.get("manipulations_leg") or {}, es.get("manipulations_leg") or {}
+    if ma.get("hat_manipuliert") and mb.get("hat_manipuliert"):
         raus["true_manipulation"].append(
             {
-                f"{a_name}_levels": a_belege,
-                f"{b_name}_levels": b_belege,
-                # Gleiches Level auf beiden Seiten = klassischster TM-Fall
-                "gleiche_levels": sorted(set(a_belege) & set(b_belege)),
-                # Getrennt ausgewiesen, damit im Bias unterscheidbar bleibt,
-                # ob die Manipulation ein Sweep (Wick durch ein Level) oder
-                # ein Tap in ein HTF-FVG war. Beides ist nach Tag 19
-                # Manipulation, liest sich im Text aber anders.
-                f"{a_name}_sweeps": a_sweeps,
-                f"{b_name}_sweeps": b_sweeps,
-                f"{a_name}_fvg_taps": [x for x in a_belege if x not in a_sweeps],
-                f"{b_name}_fvg_taps": [x for x in b_belege if x not in b_sweeps],
-                # Tag 24 sagt ausdruecklich, dass es NICHT dasselbe Level sein
-                # muss ("hoeher oder tiefer zaehlt auch"). Zur Richtung sagt
-                # das Bootcamp nichts, deshalb wird hier nicht gefiltert -
-                # die Seite wird nur ausgewiesen, damit im Bias sichtbar ist,
-                # ob beide Pairs in dieselbe Richtung manipuliert haben.
-                f"{a_name}_seiten": a_seiten,
-                f"{b_name}_seiten": b_seiten,
-                "gleiche_seite": sorted(set(a_seiten) & set(b_seiten)),
+                f"{a_name}_leg": ma,
+                f"{b_name}_leg": mb,
+                "gleiche_levels": sorted(set(ma["sweeps"] + ma["fvg_taps"]) & set(mb["sweeps"] + mb["fvg_taps"])),
+                "gleiche_richtung": ma.get("richtung") == mb.get("richtung"),
                 "definition": (
-                    "Tag 24 + Tag 19: Manipulation = Sweep ODER Tap in ein "
-                    "HTF Key Level. Beide Pairs muessen manipuliert haben, "
-                    "nicht zwingend in dasselbe Level."
+                    "Tag 24 + Tag 19: beide Pairs manipulieren (Sweep ODER Tap in ein HTF Key "
+                    "Level, das zu Leg-Beginn existierte) im Manipulations-Leg desselben Tages."
                 ),
             }
         )
-
     return raus
 
 
-def daily_profile(d):
-    """
-    Welches der drei Daily Profiles zeichnet sich ab (Tag 19)?
-
-    Unterschieden wird genau nach den Bootcamp-Kriterien, nicht nach
-    Spannen-Verhaeltnissen (die fruehere Version verglich London- gegen
-    Asia-Spanne mit einem frei gewaehlten Faktor 0,8 - das steht so nirgends
-    im Bootcamp und konnte 2 und 3 grundsaetzlich nicht trennen):
-
-      Accumulation heisst laut Tag 19 "Seitwaertsbewegung, KEINE Liquidity
-      wird genommen". Manipulation heisst "Bewegung in ein
-      High-Timeframe-Key-Level bzw. Liquidity Sweep".
-
-      1: London/Asia Accumulation  -> London nimmt weder Asia-Liquiditaet
-         noch tappt es ein HTF Key Level.
-      2: London Reversal + NY Cont -> London hat ein HTF Key Level (PDH/PDL/
-         PWH/PWL) getappt, also echt manipuliert.
-      3: London Judas + NY Reversal-> London bewegt sich (nimmt Asia raus),
-         OHNE ein HTF Key Level zu tappen -> Judas Swing (Tag 19).
-
-    Der Unterschied zwischen 2 und 3 ist damit genau der, den das Bootcamp
-    nennt: hat London ein HTF Key Level getappt oder nicht.
-    """
-    s = d.get("sessions_heute", {})
-    asia, london, ny = s.get("asia"), s.get("london"), s.get("ny_am")
-    if not (asia and london):
-        return {"profil": "noch nicht bestimmbar"}
-
-    # Tag 19 unterscheidet Profil 2 von Profil 3 danach, ob London in ein
-    # "High-Timeframe-Key-Level" manipuliert hat. Diese Frage beantwortet im
-    # ganzen System genau eine Funktion - manipulation_belege(). Eine fruehere
-    # Version pruefte hier nur PDH/PDL/PWH/PWL und an anderer Stelle
-    # (smt_vergleich) etwas voellig anderes; jetzt ist es dieselbe Definition.
-    #
-    # Als Pools zaehlen hier NUR die Tages-/Wochen-/Monatslevel.
-    #
-    # Die Asia-Levels sind ausdruecklich NICHT dabei, obwohl Tag 12 Session
-    # Highs/Lows sonst zu den HTF Key Levels zaehlt: Tag 19 beschreibt
-    # Profil 3 als "London nimmt Asia raus, OHNE ein HTF Key Level zu
-    # tappen". Wuerde der Asia-Sweep selbst als Tap zaehlen, waere Profil 3
-    # per Konstruktion unerreichbar. Der Asia-Sweep steht deshalb getrennt
-    # in london_hat_asia_gesweept.
-    #
-    # Die London-Levels selbst sind ebenfalls raus - sie entstehen erst in
-    # diesem Fenster und laegen trivialerweise darin. NY-AM-Levels gibt es
-    # zum London-Zeitpunkt noch nicht.
-    k = d.get("key_levels", {})
-    vor_london = ("pdh", "pdl", "pwh", "pwl", "pmh", "pml")
-    pools = [
-        n for n in vor_london
-        if k.get(n) is not None and london["low"] <= k[n] <= london["high"]
-    ]
-    getappt = manipulation_belege(d, london["high"], london["low"], pools)
-    london_sweep_asia = london["high"] > asia["high"] or london["low"] < asia["low"]
-
-    if not london_sweep_asia and not getappt:
-        p = "1: London/Asia Accumulation -> NY Manipulation & Distribution"
-    elif getappt:
-        p = "2: London Reversal + NY Continuation (London hat ein HTF Key Level getappt)"
-    else:
-        p = "3: London Judas + NY Reversal (Bewegung ohne HTF-Key-Level-Tap)"
-
-    return {
-        "profil": p,
-        "london_hat_asia_gesweept": london_sweep_asia,
-        "london_hat_htf_key_level_getappt": getappt,
-        "asia_spanne": round(asia["high"] - asia["low"], 2),
-        "london_spanne": round(london["high"] - london["low"], 2),
-        "ny_am_bisher": ny,
-    }
-
-
 def po3(nq):
-    """
-    PO3 auf den laufenden Handelstag: OLHC bullisch, OHLC bearisch (Tag 23).
-    Reihenfolge kommt direkt aus auswerten() (po3_form), aus dem
-    tatsaechlichen Zeitpunkt von Hoch/Tief - nicht aus der Naehe zum Open
-    geschaetzt, das kann die Reihenfolge verwechseln.
-    """
+    """PO3 auf den laufenden Handelstag: OLHC bullisch, OHLC bearisch (Tag 23)."""
     h = nq.get("heute_bisher")
     form = nq.get("po3_form")
     if not h or not form:
@@ -1952,84 +2333,63 @@ def po3(nq):
     return ergebnis
 
 
-def stacked_po3(bars15, key_levels, htf_zonen, handelstag_heute):
+def stacked_po3(bars15, zeitachse, htf_zonen, handelstag_heute):
     """
-    Stacked PO3 nach Tag 23, woertlich: "Wenn eine Candle nichts macht,
-    erwarte ich, dass die naechste Candle das Open High Low Close liefert."
+    Stacked PO3 nach Tag 23: "Wenn eine Candle nichts macht, erwarte ich, dass
+    die naechste Candle das Open High Low Close liefert." Beispiel im Video:
+    9:30-Open ohne Manipulation, 9:45 holt sie nach.
 
-    Tag 23 beobachtet PO3 an Candle-Opens (bevorzugt 15 Minuten, 30 Minuten,
-    1 Stunde, 4 Stunden) und beschreibt Manipulation als Bewegung in ein
-    High-Timeframe-Key-Level. Manipuliert die erste Kerze nach dem Open nicht
-    in ein solches Level, kann die naechste das nachholen - mehrere Opens
-    bilden dann gemeinsam den PO3.
-
-    Umgesetzt auf die 15-Minuten-Kerzen ab dem NY-AM-Open (09:30 ET), weil
-    Tag 23 genau den 9:30-Open als Beispiel nennt. Geprueft wird pro Kerze,
-    ob sie ein HTF Key Level getappt hat - Key Level nach Tag 12, also
-    Liquidity Pools plus HTF-FVGs.
+    F7: Als Manipulation zaehlt nur ein Tap in ein Key Level, das VOR dieser
+    Kerze existierte und bis dahin noch nicht mit Body Close gebrochen war -
+    nicht die NY-AM-Levels, die diese Kerzen selbst bilden, und keine schon
+    gebrochenen Levels. HTF-FVGs nur, wenn sie vor der Kerze existierten und
+    nicht invertiert waren.
     """
     if not bars15:
         return None
-    ny = [
-        b for b in bars15
-        if handelstag(b) == handelstag_heute and in_fenster(b, 9, 30, 11, 0)
-    ]
+    tag_bars = [b for b in bars15 if handelstag(b) == handelstag_heute]
+    ny = [b for b in tag_bars if in_fenster(b, 9, 30, 11, 0)]
     if not ny:
         return None
-
-    level = [(n, v) for n, v in (key_levels or {}).items() if v]
-    zonen = [
-        (f"{z['tf']}-FVG {z['von']}-{z['bis']}", z["von"], z["bis"])
-        for z in (htf_zonen or [])
-    ]
-
     kerzen = []
-    for i, b in enumerate(ny[:8]):
-        getappt = [n for n, v in level if b["l"] <= v <= b["h"]]
-        getappt += [n for n, von, bis in zonen if b["l"] <= bis and b["h"] >= von]
+    for b in ny[:6]:
+        vorher = [x for x in tag_bars if x["t"] < b["t"]]
+        davor = vorher[-1] if vorher else None
+        getappt = []
+        for n, v in zeitachse.levels(b["t"]).items():
+            if n.startswith("ny_am") or not v:
+                continue
+            oben = n.endswith("h") or n.endswith("high")
+            gebrochen = any((x["c"] > v) if oben else (x["c"] < v) for x in vorher)
+            # "in ein Level manipulieren" = die Kerze erreicht es neu; stand
+            # die Kerze davor schon dort, ist das keine Bewegung hinein.
+            schon_dort = davor is not None and davor["l"] <= v <= davor["h"]
+            if not gebrochen and not schon_dort and b["l"] <= v <= b["h"]:
+                getappt.append(n)
+        for z in zonen_zum_zeitpunkt(htf_zonen, b["t"]):
+            schon_drin = davor is not None and davor["l"] <= z["bis"] and davor["h"] >= z["von"]
+            if not schon_drin and b["l"] <= z["bis"] and b["h"] >= z["von"]:
+                getappt.append(f"{z['tf']}-FVG {z['von']}-{z['bis']}")
         kerzen.append(
-            {
-                "kerze": b["et"].strftime("%H:%M"),
-                "hat_manipuliert": bool(getappt),
-                "getappte_key_level": getappt[:4],
-            }
+            {"kerze": b["et"].strftime("%H:%M"), "hat_manipuliert": bool(getappt), "getappte_key_level": getappt[:4]}
         )
-
     manipulierend = [k for k in kerzen if k["hat_manipuliert"]]
     if not manipulierend:
-        fazit = (
-            "Keine der NY-AM-Kerzen hat bisher in ein HTF Key Level "
-            "manipuliert - nach Tag 23 kann die naechste Kerze das nachholen."
-        )
-    elif kerzen and kerzen[0]["hat_manipuliert"]:
-        fazit = (
-            f"Die erste NY-AM-Kerze ({kerzen[0]['kerze']}) hat selbst "
-            "manipuliert - kein Stacked PO3 noetig."
-        )
+        fazit = "Keine der NY-AM-Kerzen hat bisher in ein HTF Key Level manipuliert - nach Tag 23 kann die naechste Kerze das nachholen."
+    elif kerzen[0]["hat_manipuliert"]:
+        fazit = f"Die erste NY-AM-Kerze ({kerzen[0]['kerze']}) hat selbst manipuliert - kein Stacked PO3 noetig."
     else:
-        fazit = (
-            f"Die erste Kerze hat nicht manipuliert, "
-            f"{manipulierend[0]['kerze']} hat es nachgeholt - Stacked PO3 "
-            "nach Tag 23."
-        )
+        fazit = f"Die erste Kerze hat nicht manipuliert, {manipulierend[0]['kerze']} hat es nachgeholt - Stacked PO3 nach Tag 23."
     return {"kerzen": kerzen, "fazit": fazit}
 
 
 STEMPEL = "%Y-%m-%d %H:%M:%S"
-# nq/es tragen den NY-AM Daily Bias (levels.json).
-# xau/btc tragen die Frueh-Uebersicht (levels_extra.json). Beide ohne
-# korrelierendes Pair hinterlegt - damit ausdruecklich ohne SMT und ohne
-# True Manipulation.
 BIAS = ("nq", "es")
 EXTRA = ("xau", "btc")
 
 
 def stand_aus_meta(meta):
-    """
-    Zeitpunkt des letzten Datenabrufs. Daran wird entschieden, ob die letzte
-    Kerze einer Serie noch laeuft (Tag 3). Faellt auf die aktuelle Laufzeit
-    zurueck, wenn meta.json fehlt.
-    """
+    """Zeitpunkt des letzten Datenabrufs (Rueckfall: jetzt)."""
     roh = (meta or {}).get("generiert_utc")
     if roh:
         try:
@@ -2042,12 +2402,21 @@ def stand_aus_meta(meta):
 def berechne(namen):
     meta = lade_fetch_meta()
     stand = stand_aus_meta(meta)
+    serien_laden(namen)
+    if "btc" in namen:
+        for bars in SERIEN["btc"].values():
+            for b in bars:
+                b["tag"] = b["t"].date()
+    news = lade_news() or {}
     out = {
         "berechnet_utc": datetime.now(tz=timezone.utc).strftime(STEMPEL),
         "datenstand_utc": stand.strftime(STEMPEL),
-        "hinweis": "Sessions nach CME-Zeit, Handelstag 18:00 ET bis 17:00 ET.",
+        "hinweis": "Sessions nach CME-Zeit, Handelstag 18:00 ET bis 17:00 ET (BTC: 00:00 UTC). Alle Zeitangaben mit Jahr.",
         "operationalisierungen": OPERATIONALISIERUNGEN,
+        "news_status": {"status": news.get("status", "fehlt"), "termine": len(news.get("termine", []))},
     }
+    if "nq" in namen:
+        out["rolls"] = ROLLS
     for name in namen:
         try:
             out[name] = auswerten(name, stand)
@@ -2056,6 +2425,8 @@ def berechne(namen):
                 if warnung:
                     out[name]["fetch_warnung"] = warnung
         except Exception as exc:  # noqa: BLE001
+            import traceback
+            traceback.print_exc()
             out[name] = {"fehler": f"{type(exc).__name__}: {exc}"[:300]}
     return out
 
@@ -2098,7 +2469,7 @@ def main():
     bias = berechne(BIAS)
     if all("fehler" not in bias.get(n, {"fehler": 1}) for n in BIAS):
         bias["nq_vs_es"] = smt_vergleich(bias["nq"], bias["es"])
-        bias["daily_profile"] = daily_profile(bias["nq"])
+        bias["daily_profile"] = bias["nq"].get("daily_profile") or {"profil": "noch nicht bestimmbar"}
         bias["po3_heute"] = po3(bias["nq"])
     schreibe("levels.json", bias, BIAS)
 
@@ -2113,15 +2484,12 @@ def main():
             # Open-High-Low-Close-Form des Handelstags, kein Session-Konzept.
             extra[f"po3_heute_{n}"] = po3(extra[n])
     extra["hinweis"] = (
-        "XAUUSD und BTCUSD fuer die taegliche Frueh-Uebersicht. Fuer beide gibt "
-        "es bewusst KEIN SMT und keine True Manipulation - es ist kein "
-        "korrelierendes Pair hinterlegt, und KEINE Asia-/London-/NY-AM-"
-        "Sessions (dafuer 1h-Kerzen mit deutlich laengerer Historie als bei "
-        "NQ/ES, siehe fvg_1d/fvg_4h/fvg_1h - dort faellt jetzt nichts mehr "
-        "aus dem letzten Monat heraus). Tagesschnitt ist trotzdem derselbe "
-        "wie bei den Futures (Handelstag 18:00 ET bis 17:00 ET); BTC handelt "
-        "durchgehend, Samstag und Sonntag sind deshalb eigene Handelstage - "
-        "PDH/PDL am Montag sind bei BTC also Sonntag-High/-Low, nicht Freitag."
+        "XAU (Gold-Future GC=F von Yahoo, NICHT Spot-XAUUSD - Preise liegen um den "
+        "Terminaufschlag ueber Spot) und BTCUSD fuer die taegliche Frueh-Uebersicht. "
+        "Fuer beide KEIN SMT und keine True Manipulation (kein korrelierendes Pair) "
+        "und KEINE Asia-/London-/NY-AM-Sessions. 1h/4h/1d aus 730 Tagen 1h-Historie. "
+        "Gold: CME-Handelstag 18:00 ET bis 17:00 ET. BTC: Tageskerze 00:00 UTC bis "
+        "00:00 UTC wie in ueblichen BTC-Charts, Samstag und Sonntag sind eigene Tage."
     )
     schreibe("levels_extra.json", extra, EXTRA)
 
@@ -2131,10 +2499,7 @@ def main():
     if "nq_vs_es" in bias:
         print("  SMT:", [x["level"] for x in bias["nq_vs_es"]["smt"]] or "keins")
         tm = bias["nq_vs_es"]["true_manipulation"]
-        print(
-            "  TM :",
-            f"NQ {tm[0]['nq_levels']} / ES {tm[0]['es_levels']}" if tm else "keine",
-        )
+        print("  TM :", "ja" if tm else "keine")
     print("--- Frueh-Uebersicht (levels_extra.json) ---")
     for n in EXTRA:
         print(" ", zeile(n, extra.get(n, {})))
