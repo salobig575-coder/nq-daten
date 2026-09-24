@@ -1,25 +1,23 @@
 #!/usr/bin/env python3
 """
-Holt OHLC-Bars fuer NQ, ES, XAU und BTC von Yahoo Finance und schreibt sie
-als CSV. Laeuft auf GitHub Actions (dort ist das Netz offen).
+Holt OHLC-Bars fuer NQ, ES, XAU (Gold-Future GC=F) und BTC von Yahoo Finance
+und schreibt sie als CSV. Laeuft auf GitHub Actions (dort ist das Netz offen).
 
 Ausgabe in data/:
-  nq_30m.csv, es_30m.csv, xau_30m.csv, btc_30m.csv -> 30-Minuten-Bars, 60 Tage
-  nq_1h.csv,  es_1h.csv                            -> 1-Stunden-Bars,  60 Tage
-  xau_1h.csv, btc_1h.csv                           -> 1-Stunden-Bars, 730 Tage
-  nq_1d.csv,  es_1d.csv,  xau_1d.csv,  btc_1d.csv  -> Tages-Bars,     6 Monate
-  meta.json                                        -> Zeitstempel/Status je Abruf
+  {sym}_5m.csv  -> 5-Minuten-Bars,  30 Tage
+  {sym}_15m.csv -> 15-Minuten-Bars, 60 Tage
+  {sym}_30m.csv -> 30-Minuten-Bars, 60 Tage
+  {sym}_1h.csv  -> 1-Stunden-Bars, 730 Tage (Yahoo-Maximum fuer 1h)
+  {sym}_1d.csv  -> Tages-Bars, 6 Monate (nur Referenz, analyse.py nutzt sie nicht)
+  aktuell/{sym}_5m.csv -> die letzten 3 Tage 5m, wird committet (fuer die
+                    Bias-Review, die den Verlauf ab Bias-Zeitpunkt braucht)
+  news.json      -> rote USD-Termine der letzten 14 Tage (Data High/Low, Tag 7)
+  meta.json      -> Zeitstempel/Status je Abruf
 
-XAU/BTC bekommen bei 1h bewusst eine viel laengere Reichweite als NQ/ES
-(730 statt 60 Tage - das Maximum, das Yahoo fuer die 60m/1h-Aufloesung
-herausgibt): analyse.py baut daraus fuer diese beiden Symbole jetzt auch die
-4h- und Tageskerzen (siehe dort, htf_kerzen()), statt sie wie bisher aus den
-auf 60 Tage gedeckelten 30m-Bars zu resamplen. Ohne das fielen FVGs/Levels,
-die aelter als 60 Tage sind, komplett aus der Analyse - genau das Problem,
-das im Januar zu einem falschen Daily Bias bei XAU gefuehrt hat (eine Reihe
-Daily-FVGs war schlicht nicht mehr sichtbar). 5m/15m/30m bleiben unveraendert,
-weil Yahoo dafuer ohnehin keine laengere Historie herausgibt, egal welche
-Range angefragt wird.
+Alle vier Symbole bekommen die lange 1h-Historie: analyse.py baut daraus
+1h/4h/1d, damit alte, noch offene HTF-FVGs nicht aus der Analyse fallen
+(Januar-Fehler bei XAU; bei NQ/ES dieselbe Luecke). Bei NQ/ES rechnet
+analyse.py die Kontraktwechsel heraus (Back-Adjustment).
 """
 
 import json
@@ -39,24 +37,18 @@ from datetime import datetime, timezone
 SYMBOLS = {
     "nq": ["NQ=F"],
     "es": ["ES=F"],
-    "xau": ["XAUUSD=X", "GC=F"],
+    # XAUUSD=X liefert bei Yahoo nichts - der Versuch kostete bei jedem Lauf
+    # nur Wiederholungen mit Wartezeit. Gold kommt deshalb direkt als
+    # COMEX-Future GC=F (liegt um den Terminaufschlag ueber Spot-XAUUSD).
+    "xau": ["GC=F"],
     "btc": ["BTC-USD"],
 }
 
 # (Dateisuffix, Yahoo-Interval, Yahoo-Range)
 # 5m und 15m dienen als Conditions, 30m/1h als Ausfuehrungs- und HTF-Frames.
-SERIES = [
-    ("5m", "5m", "30d"),
-    ("15m", "15m", "60d"),
-    ("30m", "30m", "60d"),
-    ("1h", "1h", "60d"),
-    ("1d", "1d", "6mo"),
-]
 
-# XAU/BTC: dieselben Serien, aber 1h mit 730 Tagen statt 60 (siehe Docstring
-# oben). NQ/ES bleiben bewusst unveraendert - der Fix gilt nur fuer XAU/BTC.
-SYMBOLE_LANGE_1H_HISTORIE = ("xau", "btc")
-SERIES_LANGE_1H_HISTORIE = [
+# Alle Symbole: 1h mit 730 Tagen (siehe Docstring).
+SERIES = [
     ("5m", "5m", "30d"),
     ("15m", "15m", "60d"),
     ("30m", "30m", "60d"),
@@ -66,8 +58,6 @@ SERIES_LANGE_1H_HISTORIE = [
 
 
 def series_fuer(name):
-    if name in SYMBOLE_LANGE_1H_HISTORIE:
-        return SERIES_LANGE_1H_HISTORIE
     return SERIES
 
 HOSTS = [
@@ -168,9 +158,30 @@ def hole_news():
             roh = json.loads(resp.read().decode("utf-8"))
     except Exception as exc:  # noqa: BLE001
         print(f"HINWEIS News-Kalender nicht erreichbar: {exc}", file=sys.stderr)
-        return {"status": "fehler", "meldung": str(exc)[:300], "termine": []}
+        # Die bisher bekannten Termine behalten, aber den Fehler ausweisen -
+        # sonst sieht ein Ausfall aus wie "keine News".
+        try:
+            with open(os.path.join(OUT_DIR, "news.json"), encoding="utf-8") as fh:
+                alt = json.load(fh).get("termine", [])
+        except (FileNotFoundError, json.JSONDecodeError, AttributeError):
+            alt = []
+        return {"status": "fehler", "meldung": str(exc)[:300], "termine": alt}
 
     termine = []
+    # M2: Die Termine der Vorwoche behalten (14 Tage), sonst ist ein noch
+    # offenes Data High/Low vom Freitag am Montag verschwunden.
+    try:
+        with open(os.path.join(OUT_DIR, "news.json"), encoding="utf-8") as fh:
+            alt = json.load(fh).get("termine", [])
+    except (FileNotFoundError, json.JSONDecodeError, AttributeError):
+        alt = []
+    grenze = datetime.now(tz=timezone.utc).timestamp() - 14 * 86400
+    for t in alt:
+        try:
+            if datetime.fromisoformat(t["zeit"]).timestamp() >= grenze:
+                termine.append(t)
+        except (KeyError, TypeError, ValueError):
+            continue
     for e in roh if isinstance(roh, list) else []:
         if e.get("country") != "USD":
             continue
@@ -185,8 +196,11 @@ def hole_news():
                 "previous": e.get("previous"),
             }
         )
-    termine.sort(key=lambda t: t["zeit"] or "")
-    print(f"OK   news: {len(termine)} rote USD-Termine diese Woche")
+    eindeutig = {}
+    for t in termine:
+        eindeutig[(t.get("titel"), t.get("zeit"))] = t
+    termine = sorted(eindeutig.values(), key=lambda t: t["zeit"] or "")
+    print(f"OK   news: {len(termine)} rote USD-Termine (letzte 14 Tage + diese Woche)")
     return {
         "status": "ok",
         "geholt_utc": datetime.now(tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
@@ -227,6 +241,16 @@ def main():
                 with open(path, "w", encoding="utf-8") as fh:
                     fh.write("zeit_utc,open,high,low,close,volume\n")
                     fh.write("\n".join(rows) + "\n")
+                if suffix == "5m":
+                    # Die letzten 3 Tage 5m werden committet (M5/R3): die
+                    # Review braucht den Verlauf ab Bias-Zeitpunkt, auch fuer
+                    # XAU/BTC. Die vollen CSVs werden nicht committet
+                    # (.gitignore data/*.csv erfasst data/aktuell/ nicht).
+                    os.makedirs(os.path.join(OUT_DIR, "aktuell"), exist_ok=True)
+                    kurz = rows[-3 * 288:]
+                    with open(os.path.join(OUT_DIR, "aktuell", f"{key}.csv"), "w", encoding="utf-8") as fh:
+                        fh.write("zeit_utc,open,high,low,close,volume\n")
+                        fh.write("\n".join(kurz) + "\n")
                 meta_out["reihen"][key] = {
                     "status": "ok",
                     "bars": len(rows),
