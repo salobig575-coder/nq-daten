@@ -7,12 +7,10 @@ on:
   # Cron hier vorher komplett raus.
   workflow_dispatch: {}
 
-  # Zusaetzliche, unabhaengige Reservespur fuer die Frueh-Uebersicht
-  # (XAU/BTC, Mail um 7:40 Wien = 5:40 UTC). Das Apps Script feuert nur in den
-  # Fenstern 11-15 und 20-22 UTC, Mo-Fr - ohne diese Spur waeren die Daten um
-  # 5:40 UTC rund sieben Stunden alt, und am Wochenende fuer BTC noch aelter.
-  # Stuendlich, alle sieben Tage: selbst wenn GitHub einen Lauf um 20-30 Minuten
-  # verzoegert, bleiben die Daten damit innerhalb des 1-2-Stunden-Fensters.
+  # Zusaetzliche, unabhaengige Spur: stuendlich, alle sieben Tage. Das Apps
+  # Script feuert nur in seinen Fenstern (Wiener Zeit: Mo-Fr 13:00-16:30 und
+  # 21:00-23:00, taeglich 05:30-07:30). Diese Spur haelt die Daten dazwischen,
+  # am Wochenende (BTC) und nach dem Freitags-Schluss (Wochenanalyse) frisch.
   schedule:
     - cron: "0 * * * *"
 
@@ -67,6 +65,10 @@ jobs:
         run: |
           git config user.name "kursdaten-bot"
           git config user.email "actions@github.com"
+          # Die vollen CSVs unter data/ sind per .gitignore ausgeschlossen
+          # (Repo-Groesse, R3). Committet werden die JSON-Ergebnisse und
+          # data/aktuell/ (letzte drei Tage 5m je Symbol, auch XAU/BTC) fuer
+          # das Bias-Review.
           git add data/
           if git diff --staged --quiet; then
             echo "Keine Aenderung, nichts zu committen."
