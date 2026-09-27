@@ -719,6 +719,23 @@ def htf_kerzen(name, bars_30m, stand_utc):
     trend_1d/struktur_1d herausfallen (Januar-Fehler bei XAU; bei NQ/ES
     dieselbe Luecke). Rueckfall auf 30m, wenn die 1h-Serie fehlt.
 
+    Zwei verschiedene Fragen, zwei verschiedene Zeitbasen (wie in auswerten()
+    fuer die 30m-Serie): Ist die EINZELNE, zuletzt gefetchte 1h-Kerze schon
+    fertig? Das kann nur der letzte tatsaechliche Tick (ende_1h/ende_30)
+    beantworten - sonst wuerde aus fehlenden Daten eine erfundene "fertige"
+    Kerze. Ist dagegen ein GANZER Tag oder 4h-Block schon vorbei? Das ist eine
+    Kalenderfrage und muss am echten "jetzt" (stand_utc) haengen, nicht am
+    letzten Tick: Yahoos Pseudo-Kerze trifft die Rasterzeit oft um 1-2 Minuten
+    nicht genau (z.B. 20:59 statt 21:00 UTC). Wurde hier statt stand_utc der
+    tick-basierte Wert benutzt, blieb ein laengst abgeschlossener Handelstag
+    (typischerweise der Freitag, uebers ganze Wochenende) als "offen"
+    stehen - er fiel dann weder in die geschlossene Tagesliste (b1d) noch in
+    heute_bars (die eigene 30m-Logik in auswerten() hatte "heute" laengst auf
+    den naechsten Handelstag weitergezaehlt), war also fuer fvg_1d/fvg_4h/
+    trend_1d/trend_4h/struktur_1d/struktur_4h/ith_itl komplett unsichtbar.
+    Genau das fuehrte dazu, dass ein FVG als "unmediated" stehen blieb, obwohl
+    der Preis am selben (fehlenden) Tag laengst hindurchgelaufen war.
+
     Rueckgabe: (b1h_geschlossen, b1h_alle, b4h_geschlossen, b4h_alle, b1d)
     """
     ende_1h = datenende(name, "1h", stand_utc)
@@ -727,15 +744,15 @@ def htf_kerzen(name, bars_30m, stand_utc):
         b1h_alle = b1h_roh
         b1h = geschlossene(b1h_roh, 60, ende_1h)
         b4h_alle = resample(b1h_roh, 4, name=name)
-        b4h = geschlossene(b4h_alle, 240, ende_1h)
-        b1d = zu_tageskerzen(b1h_roh, ende_1h, name)
+        b4h = geschlossene(b4h_alle, 240, stand_utc)
+        b1d = zu_tageskerzen(b1h_roh, stand_utc, name)
         return b1h, b1h_alle, b4h, b4h_alle, b1d
     ende_30 = datenende(name, "30m", stand_utc)
     b1h_alle = resample(bars_30m, 1, name=name)
     b4h_alle = resample(bars_30m, 4, name=name)
     return (geschlossene(b1h_alle, 60, ende_30), b1h_alle,
-            geschlossene(b4h_alle, 240, ende_30), b4h_alle,
-            zu_tageskerzen(bars_30m, ende_30, name))
+            geschlossene(b4h_alle, 240, stand_utc), b4h_alle,
+            zu_tageskerzen(bars_30m, stand_utc, name))
 
 
 # ============================================================ Struktur

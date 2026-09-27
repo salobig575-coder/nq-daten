@@ -966,6 +966,20 @@ def pruefe_daten_frisch(b, d):
 # ============================================================ Lauf
 
 def serien_bauen(name, rolls, stand):
+    """
+    Wie in analyse.py::htf_kerzen: zwei verschiedene Fragen, zwei verschiedene
+    Zeitbasen. Ob die zuletzt gefetchte EINZELNE Kerze (5m/15m/30m/1h) schon
+    fertig ist, kann nur der letzte tatsaechliche Tick (ende, tick-basiert)
+    beantworten. Ob ein ganzer 4h-Block oder Tag schon vorbei ist, ist dagegen
+    eine Kalenderfrage und muss am echten "jetzt" (stand) haengen - sonst
+    bleibt ein laengst abgeschlossener Handelstag (z.B. der Freitag, uebers
+    ganze Wochenende) in s["1d"]/s["4h"] als "offen" stehen, nur weil Yahoos
+    Pseudo-Kerze die Rasterzeit oft um 1-2 Minuten verfehlt (z.B. 20:59 statt
+    21:00 UTC). Das war der Grund, warum ein FVG hier faelschlich als
+    unmediated durchging, obwohl analyse.py denselben Tag ebenso verlor -
+    seit dessen Fix gilt hier dieselbe Regel, damit beide Skripte auf
+    identischer Zeitbasis rechnen.
+    """
     s = {}
     for suf, mi in (("5m", 5), ("15m", 15), ("30m", 30), ("1h", 60)):
         alle, tick = lade_bars(name, suf)
@@ -982,8 +996,8 @@ def serien_bauen(name, rolls, stand):
         s["1h_alle"] = basis
         s["1h"] = nur_geschlossene(basis, 60, ende)
     s["4h_alle"] = zu_stunden(basis, 4, name)
-    s["4h"] = nur_geschlossene(s["4h_alle"], 240, ende)
-    s["1d"] = zu_tageskerzen(basis, ende, name)
+    s["4h"] = nur_geschlossene(s["4h_alle"], 240, stand)
+    s["1d"] = zu_tageskerzen(basis, stand, name)
     # inkl. laufendem Tag (fuer Wick/Tap und unbestaetigte Extreme)
     s["1d_alle"] = zu_tageskerzen(basis, datetime.max.replace(tzinfo=timezone.utc), name)
     return s
