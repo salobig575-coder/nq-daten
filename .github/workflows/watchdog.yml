@@ -3,8 +3,15 @@ name: Datenfrische prüfen
 on:
   workflow_dispatch: {}
 
+  # Bisher lief dieser Workflow nur manuell (workflow_dispatch) und hat seit
+  # dem einmaligen Test am 18.09. nie wieder automatisch geprueft, ob die
+  # Datenkette noch laeuft. Stuendlich, damit die Pruefung selbst nicht
+  # veraltet - dieselbe Kadenz wie der Fallback-Cron in fetch.yml.
+  schedule:
+    - cron: "15 * * * *"
+
 permissions:
-  contents: read
+  contents: write
   issues: write
 
 jobs:
@@ -158,3 +165,41 @@ jobs:
                 issue_number: issue.number, state: "closed"
               });
             }
+
+      # Der Daily-Bias-Review laeuft in einer Session ohne GitHub-API-Zugriff
+      # (nur anonymes git clone/fetch ist dort freigegeben). Damit er trotzdem
+      # erfaehrt, ob die Datenkette steht, schreibt dieser Schritt das Ergebnis
+      # JEDES Laufs zusaetzlich in eine Datei im Repo, die per git clone lesbar
+      # ist - unabhaengig davon, ob gerade ein Issue offen ist oder nicht.
+      - name: Status-Datei schreiben und committen
+        if: always()
+        env:
+          STALE: ${{ steps.check.outputs.stale }}
+          GRUND: ${{ steps.check.outputs.grund }}
+          QUALITAET: ${{ steps.check.outputs.qualitaet }}
+          QUALITAET_GRUND: ${{ steps.check.outputs.qualitaet_grund }}
+        run: |
+          python3 - <<'EOF'
+          import json, datetime, os
+
+          status = {
+              "aktualisiert_utc": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
+              "stale": os.environ.get("STALE") == "true",
+              "stale_grund": os.environ.get("GRUND") or None,
+              "qualitaet_problem": os.environ.get("QUALITAET") == "true",
+              "qualitaet_grund": os.environ.get("QUALITAET_GRUND") or None,
+          }
+          with open("data/watchdog_status.json", "w") as f:
+              json.dump(status, f, ensure_ascii=False, indent=2)
+          EOF
+
+          git config user.name "kursdaten-bot"
+          git config user.email "actions@github.com"
+          git add data/watchdog_status.json
+          if git diff --staged --quiet; then
+            echo "Keine Aenderung, nichts zu committen."
+          else
+            git commit -m "Watchdog-Status $(date -u '+%Y-%m-%d %H:%M UTC')"
+            git pull --rebase origin main
+            git push
+          fi
