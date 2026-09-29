@@ -6,6 +6,7 @@ Vorher/Nachher-Vergleich der Ausgabe von analyse.py auf historischen Datenstaend
   python3 tools/regress.py speichern NAME [ZEIT ...]   Kennzahlen je Zeitpunkt nach tools/baseline/NAME.json
   python3 tools/regress.py vergleichen NAME [ZEIT ...] gegen die gespeicherte Baseline, listet Abweichungen
 
+Datenbasis: data/ (oder $SNAPSHOT_DATA, z.B. tests/fixtures/data).
 ZEIT = UTC, Format 2026-09-28T15:07 (Minute nicht auf dem 5er-Raster, wie ein Yahoo-Tick).
 Ohne Angabe werden Standardzeitpunkte der letzten Tage benutzt.
 
@@ -22,6 +23,7 @@ import tempfile
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(HERE, "tests"))
+os.environ.setdefault("SNAPSHOT_DATA", os.path.join(HERE, "data"))   # aktuelle Repo-Daten
 import snapshot as S  # noqa: E402
 
 BASELINE = os.path.join(HERE, "tools", "baseline")

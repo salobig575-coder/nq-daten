@@ -70,10 +70,10 @@ jobs:
         run: |
           git config user.name "kursdaten-bot"
           git config user.email "actions@github.com"
-          # Die vollen CSVs unter data/ sind per .gitignore ausgeschlossen
-          # (Repo-Groesse, R3). Committet werden die JSON-Ergebnisse und
-          # data/aktuell/ (letzte drei Tage 5m je Symbol, auch XAU/BTC) fuer
-          # das Bias-Review.
+          # Committet wird alles unter data/: die CSVs aller vier Symbole (die
+          # Historie ist eingefroren, siehe fetch_data.merge_historie - so aendern
+          # sich nur die juengsten Tage und alte Staende bleiben reproduzierbar),
+          # die JSON-Ergebnisse und data/aktuell/ (letzte drei Tage 5m).
           git add data/
           if git diff --staged --quiet; then
             echo "Keine Aenderung, nichts zu committen."
