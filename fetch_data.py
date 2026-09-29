@@ -8,11 +8,17 @@ Ausgabe in data/:
   {sym}_15m.csv -> 15-Minuten-Bars, 60 Tage
   {sym}_30m.csv -> 30-Minuten-Bars, 60 Tage
   {sym}_1h.csv  -> 1-Stunden-Bars, 730 Tage (Yahoo-Maximum fuer 1h)
-  {sym}_1d.csv  -> Tages-Bars, 6 Monate (nur Referenz, analyse.py nutzt sie nicht)
   aktuell/{sym}_5m.csv -> die letzten 3 Tage 5m, wird committet (fuer die
                     Bias-Review, die den Verlauf ab Bias-Zeitpunkt braucht)
   news.json      -> rote USD-Termine der letzten 14 Tage (Data High/Low, Tag 7)
   meta.json      -> Zeitstempel/Status je Abruf
+
+Die CSVs liegen im Repo (nicht in .gitignore) und wachsen ueber die Zeit: Yahoo
+liefert die Historie nicht stabil (gemessen am 29.09.2026: 1461 alte 1h-Bars
+in einem Abruf anders als im vorigen, Kanten alter Daily-FVGs sprangen um
+8,5 Punkte). Deshalb werden nur die juengsten Tage (FREEZE_TAGE) von Yahoo
+uebernommen, aeltere Bars bleiben unveraendert stehen (merge_historie). Das
+haelt die Levels stabil und macht die Commits klein.
 
 Alle vier Symbole bekommen die lange 1h-Historie: analyse.py baut daraus
 1h/4h/1d, damit alte, noch offene HTF-FVGs nicht aus der Analyse fallen
@@ -28,7 +34,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 # Pro Instrument mehrere Yahoo-Kandidaten. Der erste, der Bars liefert, gewinnt.
 # nq/es tragen den NY-AM Daily Bias, xau/btc die taegliche Frueh-Uebersicht.
@@ -46,6 +52,8 @@ SYMBOLS = {
 
 # (Dateisuffix, Yahoo-Interval, Yahoo-Range)
 # 5m und 15m dienen als Conditions, 30m/1h als Ausfuehrungs- und HTF-Frames.
+# Die 1d-Serie von Yahoo wurde entfernt: sie laeuft von Mitternacht bis
+# Mitternacht, analyse.py nutzt sie nie (Tageskerzen kommen aus der 1h-Serie).
 
 # Alle Symbole: 1h mit 730 Tagen (siehe Docstring).
 SERIES = [
@@ -53,8 +61,16 @@ SERIES = [
     ("15m", "15m", "60d"),
     ("30m", "30m", "60d"),
     ("1h", "1h", "730d"),
-    ("1d", "1d", "6mo"),
 ]
+
+# Raster je Serie in Minuten (Kerzenstart muss darauf liegen, sonst ist es
+# Yahoos Pseudo-Kerze mit dem letzten Tick).
+RASTER_MIN = {"5m": 5, "15m": 15, "30m": 30, "1h": 60}
+# Nur die juengsten Tage uebernimmt der Abruf von Yahoo, davor bleiben die
+# gespeicherten Bars unveraendert (siehe merge_historie).
+FREEZE_TAGE = {"5m": 3, "15m": 5, "30m": 5, "1h": 10}
+# Wie lange die Bars insgesamt aufgehoben werden.
+BEHALTEN_TAGE = {"5m": 45, "15m": 120, "30m": 120, "1h": 800}
 
 
 def series_fuer(name):
@@ -101,6 +117,64 @@ def fetch_json(pfad, tries=3):
         if attempt < tries - 1:
             time.sleep(8 * (attempt + 1))
     raise RuntimeError(f"Abruf fehlgeschlagen ({pfad}) -> {last}")
+
+
+def _zeit(zeile):
+    return datetime.strptime(zeile.split(",")[0], "%Y-%m-%d %H:%M").replace(tzinfo=timezone.utc)
+
+
+def lese_csv_zeilen(pfad):
+    """Bestehende CSV als Liste von Zeilen (ohne Kopf). Fehlt sie: leere Liste."""
+    try:
+        with open(pfad, encoding="utf-8") as fh:
+            zeilen = [z.strip() for z in fh.read().splitlines()[1:] if z.strip()]
+    except FileNotFoundError:
+        return []
+    ok = []
+    for z in zeilen:
+        try:
+            _zeit(z)
+            ok.append(z)
+        except ValueError:
+            continue
+    return ok
+
+
+def merge_historie(alt, neu, suffix):
+    """
+    Fuehrt gespeicherte und frisch geholte Bars zusammen.
+
+    - Ab dem Stichtag (letzter neuer Zeitpunkt minus FREEZE_TAGE) gilt Yahoo:
+      neue Bars ersetzen alte. Alte Bars, die Yahoo dort nicht mehr liefert,
+      bleiben stehen, wenn sie auf dem Raster liegen (fuellt Yahoo-Luecken);
+      alte Pseudo-Kerzen (nicht auf dem Raster) fliegen raus.
+    - Davor bleiben die gespeicherten Bars unveraendert. Neue Bars, die es
+      gespeichert noch nicht gibt (Historie wurde nach hinten verlaengert),
+      kommen dazu.
+    - Insgesamt werden nur BEHALTEN_TAGE aufgehoben.
+    Ohne gespeicherte Bars: die neuen Bars unveraendert.
+    """
+    if not neu:
+        return list(alt)
+    if not alt:
+        return list(neu)
+    raster = RASTER_MIN[suffix]
+    neu_map = {z.split(",")[0]: z for z in neu}
+    ende = max(_zeit(z) for z in neu)
+    stichtag = ende - timedelta(days=FREEZE_TAGE[suffix])
+    erg = {}
+    for z in alt:
+        t = _zeit(z)
+        if t < stichtag:
+            erg[z.split(",")[0]] = z
+        elif (t.hour * 60 + t.minute) % raster == 0:
+            erg[z.split(",")[0]] = z  # wird unten von Yahoo ueberschrieben, falls geliefert
+    for k, z in neu_map.items():
+        t = _zeit(z)
+        if t >= stichtag or k not in erg:
+            erg[k] = z
+    grenze = ende - timedelta(days=BEHALTEN_TAGE[suffix])
+    return [erg[k] for k in sorted(erg) if _zeit(erg[k]) >= grenze]
 
 
 def to_rows(payload):
@@ -238,14 +312,15 @@ def main():
                 if not rows:
                     raise RuntimeError("; ".join(fehler) or "keine Bars zurueckgekommen")
                 path = os.path.join(OUT_DIR, f"{key}.csv")
+                rows = merge_historie(lese_csv_zeilen(path), rows, suffix)
                 with open(path, "w", encoding="utf-8") as fh:
                     fh.write("zeit_utc,open,high,low,close,volume\n")
                     fh.write("\n".join(rows) + "\n")
                 if suffix == "5m":
                     # Die letzten 3 Tage 5m werden committet (M5/R3): die
                     # Review braucht den Verlauf ab Bias-Zeitpunkt, auch fuer
-                    # XAU/BTC. Die vollen CSVs werden nicht committet
-                    # (.gitignore data/*.csv erfasst data/aktuell/ nicht).
+                    # XAU/BTC (zusaetzlich zu den vollen, ebenfalls
+                    # versionierten CSVs).
                     os.makedirs(os.path.join(OUT_DIR, "aktuell"), exist_ok=True)
                     kurz = rows[-3 * 288:]
                     with open(os.path.join(OUT_DIR, "aktuell", f"{key}.csv"), "w", encoding="utf-8") as fh:

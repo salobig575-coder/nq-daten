@@ -3,12 +3,11 @@ name: Datenfrische prüfen
 on:
   workflow_dispatch: {}
 
-  # Bisher lief dieser Workflow nur manuell (workflow_dispatch) und hat seit
-  # dem einmaligen Test am 18.09. nie wieder automatisch geprueft, ob die
-  # Datenkette noch laeuft. Stuendlich, damit die Pruefung selbst nicht
-  # veraltet - dieselbe Kadenz wie der Fallback-Cron in fetch.yml.
+  # Zwei Eintraege pro Stunde, weil GitHub geplante Laeufe unter Last
+  # auslaesst (siehe fetch.yml). Versetzt zu den Abruf-Laeufen (:07/:37).
   schedule:
-    - cron: "15 * * * *"
+    - cron: "22 * * * *"
+    - cron: "52 * * * *"
 
 permissions:
   contents: write
@@ -17,6 +16,7 @@ permissions:
 jobs:
   frische-check:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Repo auschecken
         uses: actions/checkout@v4
@@ -27,6 +27,11 @@ jobs:
           python3 - <<'EOF' >> "$GITHUB_OUTPUT"
           import json, datetime
           from zoneinfo import ZoneInfo
+
+          # Ausserhalb der Apps-Script-Fenster kommt nur der Cron (2x pro Stunde,
+          # real mit Verzoegerung). 30 Minuten waren deshalb zu knapp und
+          # haben Fehlalarme (Issues #2-#4) erzeugt.
+          STALE_MIN = 75
 
           def zeile(text):
               # Eine Zeile pro Ausgabe (GITHUB_OUTPUT), keine Zeilenumbrueche.
@@ -39,7 +44,7 @@ jobs:
               berechnet = datetime.datetime.strptime(data["berechnet_utc"], "%Y-%m-%d %H:%M:%S")
               berechnet = berechnet.replace(tzinfo=datetime.timezone.utc)
               alter_min = (datetime.datetime.now(datetime.timezone.utc) - berechnet).total_seconds() / 60
-              if alter_min > 30:
+              if alter_min > STALE_MIN:
                   print("stale=true")
                   et = berechnet.astimezone(ZoneInfo("America/New_York")).strftime("%Y-%m-%d %H:%M")
                   print(zeile(f"grund=levels.json ist {alter_min:.0f} Minuten alt (zuletzt berechnet {et} ET)"))
@@ -200,6 +205,16 @@ jobs:
             echo "Keine Aenderung, nichts zu committen."
           else
             git commit -m "Watchdog-Status $(date -u '+%Y-%m-%d %H:%M UTC')"
-            git pull --rebase origin main
-            git push
+            # Kein gemeinsamer concurrency-Block mit fetch.yml: GitHub haelt pro
+            # Gruppe nur EINEN wartenden Lauf, ein wartender Watchdog wuerde
+            # sonst einen wartenden Datenabruf verdraengen. Stattdessen
+            # rebase + Wiederholung, wie in fetch.yml.
+            for versuch in 1 2 3 4; do
+              git pull --rebase origin main && git push && exit 0
+              git rebase --abort 2>/dev/null || true
+              echo "Push-Versuch $versuch fehlgeschlagen, neuer Versuch ..."
+              sleep $((versuch * 5))
+            done
+            echo "::error::Push nach 4 Versuchen fehlgeschlagen"
+            exit 1
           fi
