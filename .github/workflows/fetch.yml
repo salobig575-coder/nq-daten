@@ -7,12 +7,17 @@ on:
   # Cron hier vorher komplett raus.
   workflow_dispatch: {}
 
-  # Zusaetzliche, unabhaengige Spur: stuendlich, alle sieben Tage. Das Apps
-  # Script feuert nur in seinen Fenstern (Wiener Zeit: Mo-Fr 13:00-16:30 und
-  # 21:00-23:00, taeglich 05:30-07:30). Diese Spur haelt die Daten dazwischen,
-  # am Wochenende (BTC) und nach dem Freitags-Schluss (Wochenanalyse) frisch.
+  # Zusaetzliche, unabhaengige Spur, alle sieben Tage. Das Apps Script feuert
+  # nur in seinen Fenstern (Wiener Zeit: Mo-Fr 13:00-16:30 und 21:00-23:00,
+  # taeglich 05:30-07:30). Diese Spur haelt die Daten dazwischen, am Wochenende
+  # (BTC) und nach dem Freitags-Schluss (Wochenanalyse) frisch.
+  # GitHub laesst geplante Laeufe unter Last aus (gemessen: von 84 erwarteten
+  # Stunden-Laeufen in 3,5 Tagen kamen 19). Deshalb zwei Eintraege pro Stunde:
+  # faellt einer aus, springt oft der andere ein. Minuten :07/:37, nicht :00,
+  # weil zur vollen Stunde die meisten Cron-Laeufe ausfallen.
   schedule:
-    - cron: "0 * * * *"
+    - cron: "7 * * * *"
+    - cron: "37 * * * *"
 
 permissions:
   contents: write
@@ -74,5 +79,16 @@ jobs:
             echo "Keine Aenderung, nichts zu committen."
           else
             git commit -m "Kursdaten $(date -u '+%Y-%m-%d %H:%M UTC')"
-            git push
+            # Der Watchdog und ein zweiter Abruf pushen ebenfalls auf main.
+            # Ohne Rebase wurde der Push abgelehnt ("fetch first") und die
+            # Daten dieses Laufs gingen verloren (Laeufe vom 28.09.2026).
+            # Konflikte in data/ gibt es keine: der Watchdog schreibt nur
+            # watchdog_status.json, die Kursdaten kommen nur von hier.
+            for versuch in 1 2 3 4; do
+              git pull --rebase origin main && git push && exit 0
+              echo "Push-Versuch $versuch fehlgeschlagen, neuer Versuch ..."
+              sleep $((versuch * 5))
+            done
+            echo "::error::Push nach 4 Versuchen fehlgeschlagen"
+            exit 1
           fi
