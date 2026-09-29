@@ -1,6 +1,6 @@
 """Lauf von analyse.py und pruefe.py auf einem historischen Datenstand.
 
-Die CSVs aus data/ werden auf Kerzen VOR dem Zeitpunkt T gekuerzt und mit einer
+Die CSVs aus tests/fixtures/data (oder $SNAPSHOT_DATA) werden auf Kerzen VOR dem Zeitpunkt T gekuerzt und mit einer
 Pseudo-Kerze (letzter Tick) wie bei Yahoo abgeschlossen. So laesst sich jeder
 Zeitpunkt der letzten Wochen nachstellen, ohne Netz und ohne das Repo zu veraendern.
 """
@@ -11,7 +11,9 @@ import tempfile
 from datetime import datetime, timezone
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-REPO_DATA = os.path.join(HERE, "data")
+# Standard: eingefrorene Testdaten (deterministisch, unabhaengig vom laufenden Abruf).
+# SNAPSHOT_DATA=data nimmt stattdessen die aktuellen Repo-Daten (tools/regress.py).
+REPO_DATA = os.environ.get("SNAPSHOT_DATA") or os.path.join(HERE, "tests", "fixtures", "data")
 
 
 def parse(text):
