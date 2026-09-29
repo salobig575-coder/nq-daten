@@ -118,7 +118,8 @@ Das ist der Kern dieser Aufgabe. Nimm dir dafür Zeit, es gibt kein Zeitlimit. A
 
 4b. Prüfe jede Einzelaussage: RICHTIG / FALSCH / NICHT PRÜFBAR, mit Beleg (Zahl und Zeit in ET). Aussagen über den Zustand zum Bias-Zeitpunkt prüfst du gegen den Snapshot aus Schritt 2 (war das Level zum Bias-Zeitpunkt wirklich noch offen, war das FVG wirklich ungefüllt, stimmte die Zahl?), Aussagen über den späteren Verlauf gegen den Endstand.
 
-4c. Suche, was FEHLT: Geh im Snapshot die vollständigen Listen durch (fvg_1w, fvg_1d, fvg_4h, fvg_1h, fvg_30m, ith_itl, key_levels, offene_nwog, equal_levels_1h, data_levels) und prüfe: Gab es ein Level in Preisnähe oder in Richtung des DOL, das den Tag bestimmt hat (Reaktion, Sweep, Ziel erreicht), im Bias aber nicht vorkam? Gab es ein näheres oder besseres DOL? Wurde ein altes, noch offenes Daily-FVG oder 4h-FVG übersehen, das dann das Ziel war?
+4c. Suche, was FEHLT - deterministisch, nicht aus dem Gedächtnis: Lege den Bias-Snapshot ab (`git show <Commit>:data/levels.json > /tmp/snap.json`, bei XAU/BTC levels_extra.json) und erzeuge mit dem im Bias genannten DOL (und ggf. der genannten Pullback-Zone) die Level-Check-Ausgabe: `cd /tmp/nqd_lauf && python3 levelcheck.py /tmp/snap.json <nq|xau|btc> --dol <DOL> [--zone <Zone>]`. Prüfe dann mit `bewerte.py` (mehrfach `--level <Preis>` für die aufgelisteten Levels), welche davon im Verlauf ab Bias-Zeitpunkt berührt wurden und wann.
+"Level uebersehen" vergibst du NUR, wenn ALLE drei Bedingungen erfüllt sind: (a) das Level/Array stand im Snapshot-Check zwischen Preis und DOL bzw. Zone oder auf der Gegenseite näher als das DOL, (b) der Bias hat es nicht erwähnt, (c) es wurde im Verlauf berührt und hat den Tag mitbestimmt (Reaktion, Sweep, Ziel). Fehlt eine Bedingung, ist es kein Fehler (Hinterher-Klugsein) - höchstens eine Beobachtung. Die Fehler-Details nennen das Level mit Timeframe, Abstand und die Berührungszeit aus bewerte.py, damit der Lernpunkt an einer prüfbaren Zahl hängt. Zusätzlich: Ein altes, noch offenes Daily-/Weekly-FVG als Ziel übersehen? Gab es ein näheres oder besseres DOL?
 
 4d. Vergleiche die Reihenfolge der Ereignisse: passte die Geschichte des Bias (was zuerst, was danach) zur tatsächlichen Abfolge laut po3_form, hoch/tief-Zeiten und struktur_*? Wo wich der Markt ab, und war das zum Bias-Zeitpunkt schon aus den Daten erkennbar?
 
@@ -159,6 +160,11 @@ Das Ergebnis dieses Schritts bleibt dauerhaft erhalten, die Mail allein reicht n
 - Muster, die sich an 3 verschiedenen Tagen bewährt haben, kommen mit Datum in den Abschnitt "Was gut funktioniert".
 Ändere nur, was sich durch den heutigen Tag ändert, und lass den Rest der Seite unverändert.
 
+5f. Lernstand und Schwerpunkte pflegen (gleiche Seite "Bias-Regeln", zwei Abschnitte; ändere sonst nichts):
+- "Aktuelle Schwerpunkte (automatisch)": höchstens 3 Einträge. Nimm die Muster-Tags der letzten 7 Tage mit den meisten verschiedenen Tagen (ohne Fehlerart Daten-Fehler, News, Chop/Marktbedingung, Kein Fehler; Beobachtungen mit nur 1 Vorfall zählen mit, wenn sie sich wiederholen). Je Eintrag EIN Prüfschritt vor dem Versand in einem Satz, abgeleitet aus dem Lernpunkt, nur mit Feldern und Zahlen aus levels.json bzw. dem Level-Check und ohne neue Bootcamp-Behauptung (Quelle: Log-Zeilen mit Datum + Symbol). Einträge, die 14 Tage nicht mehr vorkamen, entfernst du. Das sind keine "Aktiven Regeln" (die gibt weiterhin nur Salzmir frei); sie wirken sofort, verfallen aber von selbst.
+- "Lernstand": eine Zeile je Fehlerart mit Anzahl der Log-Zeilen der letzten 7 Tage gegenüber den 7 Tagen davor sowie die Trefferquote (TREFFER + TEILTREFFER im Verhältnis zu allen bewerteten Zeilen), getrennt nach NQ1!, XAUUSD, BTCUSD. Nur aus dem Bias-Log gezählt, nichts geschätzt; bei weniger als 5 Zeilen im Vergleichszeitraum schreibst du "zu wenig Daten". Damit ist sichtbar, ob "Level uebersehen" und die anderen Fehlerarten tatsächlich weniger werden.
+- Hilft ein Schwerpunkt nicht (derselbe Muster-Tag tritt trotz Schwerpunkt an 3 weiteren Tagen auf), schreibst du das dazu und schärfst den Prüfschritt ("wurde am <Datum> nicht angewendet" oder "zu unklar"), statt ihn zu wiederholen.
+
 5e. Ist Notion nicht erreichbar oder schlägt ein Schreibvorgang fehl: Aufgabe trotzdem zu Ende bringen, den Lernpunkt in die Mail schreiben und am Ende eine Zeile "Notion-Log: nicht möglich heute". Nichts als "gespeichert" melden, was nicht gespeichert wurde.
 
 === SCHRITT 6 — Laufende Trefferquote (pro Symbol) ===
@@ -182,7 +188,7 @@ Die Mail ist bewusst kurz. Die gründliche Analyse steht im Notion-Log, nicht in
 3. BTCUSD: höchstens drei Sätze insgesamt. Dann "Ergebnis BTC: <WORT>".
 4. Pro Symbol nur wenn wirklich etwas dabei rauskam: eine Zeile "Fehler/Lernpunkt:" mit Fehlerart und dem konkreten Lernpunkt aus dem Log, höchstens zwei Sätze. Wenn der Bias einfach sauber aufgegangen ist, entfällt die Zeile oder es reicht ein Satz. Kein Füllmaterial, keine Trading-Ratschläge, keine Motivationssprüche.
 5. Falls heute eine Regel vorgeschlagen wurde: eine Zeile "Regel-Vorschlag R<Nr>: <Regel> - wartet auf Freigabe".
-6. Die laufende Trefferquote aus Schritt 6, eine Zeile pro Symbol.
+6. Die laufende Trefferquote aus Schritt 6, eine Zeile pro Symbol, dazu eine Zeile "Lernstand: <Fehlerart> <Anzahl letzte 7 Tage> statt <Anzahl davor>" für "Level uebersehen" und die zwei nächsthäufigen Fehlerarten (oder "Lernstand: zu wenig Daten").
 7. Eine Zeile zum Log: "Notion-Log: 3 Einträge aktualisiert" (Zahl der wirklich geschriebenen Einträge) oder "Notion-Log: nicht möglich heute".
 8. Nur wenn im Watchdog-Status ein Ausfall/Qualitätsproblem gefunden wurde (Schritt 2): eine Zeile "Datenkette: ...".
 9. Nur wenn in Schritt 0d eine Lücke gefunden wurde: eine Zeile "LÜCKE: ..." pro fehlendem Tag/Symbol.
