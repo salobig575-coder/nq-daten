@@ -253,6 +253,10 @@ OPERATIONALISIERUNGEN = {
         "Freitag 17:00 ET, BTC Montag 00:00 bis Sonntag 24:00 UTC. Tag 27: Top-down beginnt bei Weekly; Tag 12: HTF-FVGs "
         "auch Weekly."
     ),
+    "luecken_fuellen": (
+        "Fehlt bei Yahoo eine 1h-Kerze, obwohl die 30m-Serie fuer diese Stunde Kerzen hat, wird sie aus den 30m-Kerzen gebaut "
+        "(Open der ersten, Hoch/Tief/Close aus allen, Feld gefuellt). Sonst fehlt ihr Extrem in 4h-/Tageskerze."
+    ),
     "kerzenbasis": (
         "Body Close (Bruch, IFVG, FVG-Bildung, Swing Points) nur auf geschlossenen "
         "Kerzen (Tag 3). Wick/Tap/Sweep (mediated, EQH/EQL gesweept, Level-Sweep) "
@@ -326,6 +330,32 @@ def lade(pfad, suffix=None, schluessel=None):
     if schluessel is not None:
         DATENENDE[schluessel] = letzter_tick
     return bars
+
+
+def fuelle_luecken(fein, grob, minuten_grob):
+    """
+    Fehlt bei Yahoo eine Kerze der groeberen Serie (z.B. die 1h-Kerze 23:00 ET),
+    obwohl die feinere Serie (30m) fuer diese Zeit Kerzen hat, wird sie aus den
+    feineren Kerzen gebaut. Sonst fehlt deren Hoch/Tief in 4h-/Tageskerze (die
+    aus der 1h-Serie entstehen) und im Zonenregister. Nur im Bereich, den die
+    feinere Serie abdeckt; gebaute Kerzen tragen "gefuellt".
+    """
+    if not fein or not grob:
+        return grob
+    vorhanden = {b["t"] for b in grob}
+    slots = {}
+    for b in fein:
+        start = b["t"] - timedelta(minutes=(b["t"].hour * 60 + b["t"].minute) % minuten_grob)
+        if start not in vorhanden and start >= grob[0]["t"]:
+            slots.setdefault(start, []).append(b)
+    if not slots:
+        return grob
+    neu = []
+    for start, g in sorted(slots.items()):
+        neu.append({"t": start, "et": start.astimezone(ET), "o": g[0]["o"], "h": max(x["h"] for x in g),
+                    "l": min(x["l"] for x in g), "c": g[-1]["c"], "v": sum(x.get("v", 0.0) for x in g),
+                    "gefuellt": True})
+    return sorted(grob + neu, key=lambda b: b["t"])
 
 
 def vielleicht_laden(name, suffix):
@@ -625,6 +655,7 @@ def serien_laden(namen):
     global ROLLS
     for name in namen:
         SERIEN[name] = {s: vielleicht_laden(name, s) for s in ("5m", "15m", "30m", "1h")}
+        SERIEN[name]["1h"] = fuelle_luecken(SERIEN[name]["30m"], SERIEN[name]["1h"], 60)
     if "nq" in namen and "es" in namen:
         neu = []
         for s in ("1h", "30m", "15m", "5m"):
@@ -1317,7 +1348,7 @@ def intermediate_levels(bars, tf_name, minuten=None, max_zu=3, live=()):
     return kuerze_ith(alle, max_zu)
 
 
-def kuerze_ith(alle, max_zu=3):
+def kuerze_ith(alle, max_zu=3, seit_et=None):
     """
     Anzeigeliste aus dem ITH/ITL-Register. Tag 16 beschreibt ITH/ITL als
     Liquidity-Punkte und Tag 25 nennt "Intermediate High/Low Sweeps" als
@@ -1328,8 +1359,12 @@ def kuerze_ith(alle, max_zu=3):
     """
     offen = [r for r in alle if r["status"] != "body_close"]
     zu = [r for r in alle if r["status"] == "body_close"]
-    zu = zu[len(zu) - max_zu:] if max_zu else []
-    behalten = set(id(r) for r in offen) | set(id(r) for r in zu)
+    juengste = zu[len(zu) - max_zu:] if max_zu else []
+    # Auch die in den letzten Tagen genommenen bleiben sichtbar: Rejection Blocks,
+    # Manipulationen und Stacked PO3 der Woche beziehen sich auf sie und
+    # muessen nachpruefbar sein.
+    neu = [r for r in zu if seit_et and r.get("bruch_zeit_et", "") >= seit_et]
+    behalten = set(id(r) for r in offen) | set(id(r) for r in juengste) | set(id(r) for r in neu)
     return ohne_intern([dict(r) for r in alle if id(r) in behalten])
 
 
@@ -2424,10 +2459,14 @@ def auswerten(name, stand_utc=None):
     b1h, b1h_alle, b4h, b4h_alle, b1d, b1w, b1w_live_roh = htf_kerzen(name, bars, stand_utc)
     live1h, live4h = laufende(b1h_alle, b1h), laufende(b4h_alle, b4h)
     live1d = []
-    if heute_bars:
-        live1d = [{"t": heute_bars[0]["t"], "et": heute_bars[0]["et"], "o": heute_bars[0]["o"],
-                   "h": max(b["h"] for b in heute_bars), "l": min(b["l"] for b in heute_bars),
-                   "c": heute_bars[-1]["c"], "v": 0}]
+    # Die laufende Tageskerze aus derselben Serie wie die geschlossenen Tageskerzen
+    # (1h). Yahoos 30m- und 1h-Daten weichen um einige Punkte voneinander ab; die
+    # Mischung liess Hoch/Tief der laufenden Kerze zwischen beiden Serien springen.
+    heute_htf = [b for b in b1h_alle if handelstag(b) == heute] or heute_bars
+    if heute_htf:
+        live1d = [{"t": heute_htf[0]["t"], "et": heute_htf[0]["et"], "o": heute_htf[0]["o"],
+                   "h": max(b["h"] for b in heute_htf), "l": min(b["l"] for b in heute_htf),
+                   "c": heute_htf[-1]["c"], "v": 0}]
     live1w = b1w_live_roh
 
     nwog, ndog, offene_nwog = opening_gaps(bars, name)
@@ -2460,10 +2499,15 @@ def auswerten(name, stand_utc=None):
     zeitachse = Zeitachse(name, bars)
     kl = KeyLevels(name, zeitachse, statische_levels(data_alle, eq_alle, ith_alle), b5_basis)
 
-    b15s = b15_z[-600:]
-    b5s = b5_z[-900:]
-    fvg15 = markiere_sponsorship(kuerze_fvgs(finde_fvgs_alle(b15s, live15, 15, 15)), b15s, zonen, kl) if b15 else []
-    fvg5 = markiere_sponsorship(kuerze_fvgs(finde_fvgs_alle(b5s, live5, 5, 5)), b5s, zonen, kl) if b5 else []
+    # 15m/5m: FVGs der letzten 600 bzw. 900 Kerzen. Der Ursprung des Legs (Sponsor)
+    # wird auf der GANZEN Serie gesucht, nicht nur im Anzeigefenster - sonst
+    # wuerde das Leg am Fensteranfang abgeschnitten.
+    def fenster_fvgs(bars_zu, live, minuten, n):
+        alle = [f for f in finde_fvgs_alle(bars_zu, live, minuten, minuten) if f["_i"] >= len(bars_zu) - n + 2]
+        return markiere_sponsorship(kuerze_fvgs(alle), bars_zu, zonen, kl)
+
+    fvg15 = fenster_fvgs(b15_z, live15, 15, 600) if b15 else []
+    fvg5 = fenster_fvgs(b5_z, live5, 5, 900) if b5 else []
 
     # Manipulation je Session (Asia/London/NY AM) auf 5m, Rueckfall 30m.
     if heute_5m_alle:
@@ -2523,7 +2567,8 @@ def auswerten(name, stand_utc=None):
         "fvg_30m": ohne_intern(kuerze_fvgs(reg["30m"], max_unmediated=FVG_30M_MAX_UNMEDIATED)),
         "fvg_15m": ohne_intern(fvg15),
         "fvg_5m": ohne_intern(fvg5),
-        "ith_itl": [x for liste in ith_reg.values() for x in kuerze_ith(liste)],
+        "ith_itl": [x for liste in ith_reg.values()
+                    for x in kuerze_ith(liste, seit_et=(bars[-1]["et"] - timedelta(days=7)).strftime(ZF))],
         "rejection_blocks_30m": rejection_blocks(bars_z[-240:], kl, zonen),
         "devil_marks_30m": devil_marks(bars_z[-120:], name),
         "equal_levels_1h": kuerze_equals(eq_alle),
