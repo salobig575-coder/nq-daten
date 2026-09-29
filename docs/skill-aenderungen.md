@@ -31,3 +31,4 @@ Bestehende Nummern: W1 HTF-Untergrenze · W2 ITH/ITL-Timeframes · W3 Devil Mark
 * `ith_itl` enthält zusätzlich die in den letzten 7 Tagen genommenen Levels (Status `body_close`).
 * Prüfer: `pruefung.json` rechnet Vollständigkeit der Manipulation (Zeitachsen-Levels, HTF-FVG-Taps) nach.
 * Review: Zahlen zu Bewegung/DOL/Levels kommen aus `bewerte.py` (Repo), nicht aus eigener Rechnung.
+* Lernkreislauf: Bias führt vor dem Schreiben `levelcheck.py` aus (Pflicht); Review vergibt "Level uebersehen" nur, wenn das Level im Snapshot-Check zwischen Preis und DOL (bzw. auf der Gegenseite näher) lag, im Bias fehlte und im Verlauf berührt wurde. Die Review pflegt auf der Notion-Seite "Bias-Regeln" die Abschnitte "Aktuelle Schwerpunkte (automatisch)" und "Lernstand".

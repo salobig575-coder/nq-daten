@@ -28,6 +28,8 @@ Google Apps Script (Fenster) + GitHub-Cron (:07/:37)
 | `fetch_data.py` | Kursabruf, Historie einfrieren (`merge_historie`), Fehlerstatus in `meta.json` |
 | `analyse.py` | Berechnung; die Definitionen stehen im Register `OPERATIONALISIERUNGEN` am Dateianfang und werden mit nach `levels.json` geschrieben |
 | `pruefe.py` | Gegenprüfung; jede Prüfung nennt den Bootcamp-Tag. `FEHLER` = Wert darf nicht als sichere Aussage benutzt werden |
+| `levelcheck.py` | Deterministischer Level-Check gegen "Level übersehen": offene Levels/unmediated Arrays zwischen Preis und DOL/Zone und auf der Gegenseite. Bias-Routinen führen ihn vor dem Schreiben aus, die Review vergibt "Level uebersehen" nur mit seiner Hilfe |
+| `biascheck.py` | Text-Check für Bias-Entwürfe: Zahlen ohne Datenbeleg, Bezeichnung ohne Timeframe, "geprintet", UTC, "aktuell" auf altem Snapshot (Formfehler-Arten des Reviews) |
 | `bewerte.py` | Review-Kennzahlen deterministisch aus den 5m-Kerzen (MFE/MAE, DOL erreicht, Levels, ET-Zeiten) |
 | `tools/regress.py` | `analyse.py` + `pruefe.py` auf historischen Datenständen; Baseline speichern/vergleichen |
 | `tests/` | pytest: Kernfunktionen mit künstlichen Kerzen, Mutationstests für `pruefe.py` (auf eingefrorenen Kursdaten in `tests/fixtures/data`), `merge_historie`, `bewerte.py` |
@@ -63,6 +65,7 @@ python -m pytest tests -q    # ca. 15 Sekunden
 python tools/regress.py pruefen                   # pruefe.py auf 20 historischen Datenständen
 python tools/regress.py speichern vorher          # Baseline vor einer Änderung an analyse.py
 python tools/regress.py vergleichen vorher        # nach der Änderung: alle Abweichungen einzeln durchgehen
+python levelcheck.py data/levels.json nq --dol 30900   # was liegt zwischen Preis und DOL?
 python bewerte.py nq 2026-09-28 08:45 bullish --dol 30900 --level 30800   # Review-Kennzahlen (ET)
 ```
 
