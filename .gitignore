@@ -1,6 +1,6 @@
-# Die Rohdaten werden bei jedem Lauf neu geholt und muessen nicht in der
-# Git-Historie liegen. Wuerden sie committet, waechst das Repo um mehrere
-# Gigabyte pro Monat. Committet werden nur die kleinen JSON-Ergebnisse.
-data/*.csv
+# Die CSVs unter data/ werden absichtlich committet: fetch_data.py friert die
+# Historie ein (nur die juengsten Tage kommen von Yahoo), die Commits bleiben
+# dadurch klein, und alte Datenstaende lassen sich per git reproduzieren.
 __pycache__/
 *.pyc
+.pytest_cache/
