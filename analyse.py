@@ -1659,12 +1659,22 @@ class KeyLevels:
     geschlossenen 5m-Kerze genommen wurde (Tag 3: Wick = Sweep, Close = Bruch).
     """
 
-    def __init__(self, name, zeitachse, statisch, kerzen5_zu):
+    def __init__(self, name, zeitachse, statisch, kerzen5_zu, groebere=()):
+        """
+        kerzen5_zu: geschlossene 5m-Kerzen. groebere: [(geschlossene Kerzen, Minuten), ...]
+        (30m, 1h) fuer Zeiten, die vor dem Anfang der 5m-Historie liegen (5m reicht nur
+        ~30 Tage zurueck): ein Close einer gröberen Kerze ist zugleich der Close ihrer
+        letzten 5m-Kerze, das Ende der Kerze also eine obere Grenze fuer den Zeitpunkt
+        des Bruchs. Ohne sie galten alte, laengst genommene Levels als offen.
+        """
         self.name = name
         self.z = zeitachse
         self.statisch = statisch
         self.b5 = sorted(kerzen5_zu, key=lambda b: b["t"])
-        self._zeiten = [b["t"] for b in self.b5]
+        self._serien = [(self.b5, [b["t"] for b in self.b5], 5)]
+        for bars, minuten in groebere:
+            bars = sorted(bars, key=lambda b: b["t"])
+            self._serien.append((bars, [b["t"] for b in bars], minuten))
         self._body = {}
 
     def _bar(self, t):
@@ -1688,16 +1698,18 @@ class KeyLevels:
         return tag_start_utc(self.name, tag)
 
     def genommen_ab(self, preis, seite, t_ab):
-        """Ende der ersten GESCHLOSSENEN 5m-Kerze ab t_ab mit Body Close jenseits; None = nie."""
+        """Ende der ersten GESCHLOSSENEN Kerze ab t_ab mit Body Close jenseits (5m; davor 30m/1h); None = nie."""
         k = (preis, seite, t_ab)
         if k in self._body:
             return self._body[k]
-        i = bisect.bisect_left(self._zeiten, t_ab)
         res = None
-        for b in self.b5[i:]:
-            if (b["c"] > preis) if seite == "high" else (b["c"] < preis):
-                res = b["t"] + timedelta(minutes=5)
-                break
+        for bars, zeiten, minuten in self._serien:
+            i = bisect.bisect_left(zeiten, t_ab)
+            for b in bars[i:]:
+                if (b["c"] > preis) if seite == "high" else (b["c"] < preis):
+                    ende = b["t"] + timedelta(minutes=minuten)
+                    res = ende if res is None else min(res, ende)
+                    break
         self._body[k] = res
         return res
 
@@ -2497,7 +2509,8 @@ def auswerten(name, stand_utc=None):
     }
     ith_alle = [r for liste in ith_reg.values() for r in liste]
     zeitachse = Zeitachse(name, bars)
-    kl = KeyLevels(name, zeitachse, statische_levels(data_alle, eq_alle, ith_alle), b5_basis)
+    kl = KeyLevels(name, zeitachse, statische_levels(data_alle, eq_alle, ith_alle), b5_basis,
+                   groebere=[(bars_z, 30), (b1h, 60)])
 
     # 15m/5m: FVGs der letzten 600 bzw. 900 Kerzen. Der Ursprung des Legs (Sponsor)
     # wird auf der GANZEN Serie gesucht, nicht nur im Anzeigefenster - sonst

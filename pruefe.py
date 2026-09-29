@@ -64,6 +64,8 @@ UTC_SCHNITT = ("btc",)
 # "swing_spanne"): Struktur/Trend 2, Fib-Range 3, auf Tagesebene 2.
 RANGE_SPANNE = {"30m": 3, "1h": 3, "4h": 3, "1d": 2, "1w": 2}
 
+SYMBOLE_OHNE_SESSIONS = ("xau", "btc")
+
 # Operationalisierungen, die analyse.py im Register offenlegt (hier bewusst
 # nochmal eingetragen - der Pruefer importiert nichts aus analyse.py).
 RB_WICK_ANTEIL = 0.5
@@ -408,9 +410,38 @@ def level_ab(sym, lname, t):
     return None
 
 
-def body_genommen(bars5_zu, preis, hoch, von, bis):
-    """Gab es in [von, bis) eine GESCHLOSSENE 5m-Kerze mit Body Close jenseits des Levels (Tag 3)?"""
-    return any(von <= x["t"] < bis and ((x["c"] > preis) if hoch else (x["c"] < preis)) for x in bars5_zu)
+class Genommen:
+    """Wurde ein Level per Body Close einer GESCHLOSSENEN Kerze genommen (Tag 3)?
+    Massgeblich sind 5m-Kerzen; vor dem Anfang der 5m-Historie (~30 Tage) die
+    30m-/1h-Kerzen (der Close einer groeberen Kerze ist zugleich der Close ihrer
+    letzten 5m-Kerze)."""
+
+    def __init__(self, s):
+        self.serien = []
+        for suf, minuten in (("5m", 5), ("30m", 30), ("1h", 60)):
+            bars = sorted(s.get(suf) or [], key=lambda x: x["t"])
+            self.serien.append((bars, [x["t"] for x in bars], minuten))
+        self._cache = {}
+
+    def erste(self, preis, hoch, von):
+        """Ende der ersten geschlossenen Kerze mit Start >= von und Close jenseits des Levels; None = nie."""
+        k = (preis, hoch, von)
+        if k not in self._cache:
+            res = None
+            for bars, zeiten, minuten in self.serien:
+                for x in bars[bisect.bisect_left(zeiten, von):]:
+                    if (x["c"] > preis) if hoch else (x["c"] < preis):
+                        ende = x["t"] + timedelta(minutes=minuten)
+                        res = ende if res is None else min(res, ende)
+                        break
+            self._cache[k] = res
+        return self._cache[k]
+
+
+def body_genommen(g, preis, hoch, von, bis):
+    """Gab es zwischen von und bis (Kerzenende <= bis) einen Body Close jenseits des Levels?"""
+    e = g.erste(preis, hoch, von)
+    return e is not None and e <= bis
 
 
 class ZonenReg:
@@ -883,7 +914,7 @@ def pruefe_rejection_blocks(b, sym, d, s, lv, reg):
     'Starke Reaction' = Wick > RB_WICK_ANTEIL der Spanne (Register). Das Level
     muss zur Kerzenzeit existiert haben (Zeitachse bzw. offene HTF-FVG)."""
     bars = s["30m"]
-    zu5 = s["5m"]
+    zu5 = s["genommen"]
     for e in d.get("rejection_blocks_30m") or []:
         k = f"{sym} RB {e.get('richtung')} {e.get('et')}"
         idx = index_zu_zeit(bars, e.get("et"))
@@ -964,7 +995,7 @@ def pruefe_sponsorship(b, sym, d, s, lv, reg):
     HTF-FVG, die den Preis enthaelt, oder Sweep eines damals existierenden Key Levels."""
     for feld, tf in (("fvg_15m", "15m"), ("fvg_5m", "5m")):
         zu = s.get(tf) or []
-        zu5 = s["5m"]
+        zu5 = s["genommen"]
         for f in d.get(feld) or []:
             if not f.get("gesponsort"):
                 continue
@@ -1018,13 +1049,15 @@ def pruefe_sponsorship(b, sym, d, s, lv, reg):
                 b.fehler(k, "Tag 22", f"Sponsor '{sp}' nicht lesbar")
 
 
-def sweep_kerzen(bars5, ws, we, zu5, lv, sym):
-    """Erwartete Sweeps der Zeitachsen-Levels im Fenster [ws, we): Level -> Kerzenzeit (erste)."""
+def sweep_kerzen(bars5, ws, we, zu5, lv, sym, namen=None):
+    """Erwartete Sweeps der Zeitachsen-Levels im Fenster [ws, we): Level -> Kerzenzeit (erste).
+    XAU/BTC haben keine Session-Levels (nur PD/PW/PM)."""
     raus = {}
+    namen = namen or (ZEITACHSEN_LEVELS[:6] if sym in SYMBOLE_OHNE_SESSIONS else ZEITACHSEN_LEVELS)
     for x in bars5:
         if not (ws <= x["t"] < we):
             continue
-        for n in ZEITACHSEN_LEVELS:
+        for n in namen:
             if n in raus:
                 continue
             w = lv.wert(n, x["t"])
@@ -1054,7 +1087,7 @@ def pruefe_manipulation(b, sym, d, s, lv, reg):
         b.hinweis(f"{sym} Manipulation", "Tag 19", f"nur auf {m.get('basis')} berechnet, nicht pruefbar")
         return
     heute = datetime.strptime(d["handelstag"], "%Y-%m-%d").date()
-    k5, zu5 = s["5m_alle"], s["5m"]
+    k5, zu5 = s["5m_alle"], s["genommen"]
     for sname, sess in (m.get("sessions") or {}).items():
         if sess is None:
             continue
@@ -1097,8 +1130,7 @@ def pruefe_manipulation(b, sym, d, s, lv, reg):
                 if fehl:
                     fehler.append(f"Sweep {n}: {fehl}")
         gemeldet = {sw.get("level") for sw in sess.get("sweeps") or [] if sw.get("level") in ZEITACHSEN_LEVELS}
-        soll = set(sweep_kerzen(k5, ws, we, zu5, lv, sym)) if sname != "tag" else set()
-        soll = {n for n in soll if not n.startswith(sname)}
+        soll = {n for n in sweep_kerzen(k5, ws, we, zu5, lv, sym) if not n.startswith(sname)}
         if soll != gemeldet:
             fehler.append(f"Sweeps der Zeitachsen-Levels: gemeldet {sorted(gemeldet)}, nachgerechnet {sorted(soll)}")
         ist_taps = set()
@@ -1234,7 +1266,7 @@ def pruefe_stacked_po3(b, sym, d, s, lv, reg):
     bars = s.get("15m_alle") or []
     if not st or not bars:
         return
-    zu5 = s["5m"]
+    zu5 = s["genommen"]
     tag = [x for x in bars if handelstag(x).isoformat() == d.get("handelstag")]
     for kk in st.get("kerzen") or []:
         treffer = [i for i, x in enumerate(tag) if x["et"].strftime("%H:%M") == kk.get("kerze")]
@@ -1396,6 +1428,7 @@ def serien_bauen(name, rolls, stand, roll_modus="roh"):
     # inkl. laufendem Tag (fuer Wick/Tap und unbestaetigte Extreme)
     s["1d_alle"] = zu_tageskerzen(basis, datetime.max.replace(tzinfo=timezone.utc), name)
     s["1w"], s["1w_alle"] = zu_wochenkerzen(basis, stand, name)
+    s["genommen"] = Genommen(s)
     return s
 
 
