@@ -32,8 +32,10 @@ Ausgabe:
   Exit-Code 1          - wenn mindestens eine Pruefung FEHLER meldet
 """
 
+import bisect
 import json
 import os
+import re
 import sys
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
@@ -52,15 +54,24 @@ DEVIL_MARK_SYMBOLE = ("nq", "es")
 DEVIL_MARK_TOLERANZ = 0.5
 
 # W1: High Timeframe ab 30 Minuten einschliesslich.
-HTF_FVG_FELDER = (("fvg_1d", "1d"), ("fvg_4h", "4h"), ("fvg_1h", "1h"), ("fvg_30m", "30m"))
-TF_MIN = {"5m": 5, "15m": 15, "30m": 30, "1h": 60, "4h": 240, "1d": 1440}
+HTF_FVG_FELDER = (("fvg_1w", "1w"), ("fvg_1d", "1d"), ("fvg_4h", "4h"), ("fvg_1h", "1h"), ("fvg_30m", "30m"))
+TF_MIN = {"5m": 5, "15m": 15, "30m": 30, "1h": 60, "4h": 240, "1d": 1440, "1w": 10080}
 
 # BTC: Tageskerze 00:00 UTC, 4h ab 00:00 UTC. Alle anderen: CME 18:00 ET.
 UTC_SCHNITT = ("btc",)
 
 # Swing-Spanne je Timeframe, wie in analyse.py festgelegt (Register
 # "swing_spanne"): Struktur/Trend 2, Fib-Range 3, auf Tagesebene 2.
-RANGE_SPANNE = {"30m": 3, "1h": 3, "4h": 3, "1d": 2}
+RANGE_SPANNE = {"30m": 3, "1h": 3, "4h": 3, "1d": 2, "1w": 2}
+
+# Operationalisierungen, die analyse.py im Register offenlegt (hier bewusst
+# nochmal eingetragen - der Pruefer importiert nichts aus analyse.py).
+RB_WICK_ANTEIL = 0.5
+EQ_TOLERANZ = 0.0006
+LONDON_STARK_FAKTOR = 1.25
+LONDON_RICHTUNG_ANTEIL = 0.5
+SPONSOR_RUECKBLICK = 60
+FVG_1H_TAGE = 180
 
 
 # ============================================================ Rohdaten
@@ -96,11 +107,27 @@ def lade_bars(name, suffix):
     return bars, tick
 
 
+def fuelle_luecken(fein, grob, minuten_grob):
+    """Fehlende Kerze der groeberen Serie aus der feineren bauen (Register "luecken_fuellen")."""
+    if not fein or not grob:
+        return grob
+    vorhanden = {b["t"] for b in grob}
+    slots = {}
+    for b in fein:
+        start = b["t"] - timedelta(minutes=(b["t"].hour * 60 + b["t"].minute) % minuten_grob)
+        if start not in vorhanden and start >= grob[0]["t"]:
+            slots.setdefault(start, []).append(b)
+    neu = [{"t": st, "et": st.astimezone(ET), "o": g[0]["o"], "h": max(x["h"] for x in g),
+            "l": min(x["l"] for x in g), "c": g[-1]["c"], "v": 0.0}
+           for st, g in sorted(slots.items())]
+    return sorted(grob + neu, key=lambda b: b["t"]) if neu else grob
+
+
 def rolls_anwenden(bars, rolls, name, minuten):
-    """Back-Adjustment nach den in levels.json dokumentierten Rolls."""
+    """Back-Adjustment nach den in levels.json dokumentierten Rolls (nur ROLL_MODUS bereinigt, nur Sprung in einer Kerze)."""
     liste = sorted(
         (datetime.strptime(r["zeit_utc"], ZF).replace(tzinfo=timezone.utc), r[name])
-        for r in rolls or [] if r.get(name) is not None
+        for r in rolls or [] if r.get(name) is not None and r.get("art", "intrabar") == "intrabar"
     )
     if not liste:
         return
@@ -119,6 +146,27 @@ def rolls_anwenden(bars, rolls, name, minuten):
             else:
                 b["h"] = max(b["o"], b["c"])
                 b["l"] = min(b["l"], b["o"])
+
+
+def rolls_markieren(bars, rolls, minuten):
+    """Kerzen, in denen ein Kontraktwechsel liegt, bilden kein FVG (Register "roll_erkennung")."""
+    zeiten = [datetime.strptime(r["zeit_utc"], ZF).replace(tzinfo=timezone.utc) for r in rolls or []]
+    for b in bars:
+        ende = b["t"] + timedelta(minutes=minuten)
+        if any(b["t"] <= t < ende for t in zeiten):
+            b["roll"] = True
+
+
+def ist_luecke(a, b, minuten):
+    """Fehlen zwischen zwei Kerzen Kerzen, obwohl gehandelt wurde? (Register "luecken")"""
+    diff = (b["t"] - a["t"]).total_seconds() / 60
+    if diff <= minuten or diff >= 180:
+        return False
+    ende_a = a["et"] + timedelta(minutes=minuten)
+    pause_start = ende_a.replace(hour=17, minute=0, second=0, microsecond=0)
+    if ende_a <= pause_start and b["et"] >= pause_start + timedelta(hours=1):
+        return False
+    return True
 
 
 def handelstag(bar):
@@ -158,8 +206,11 @@ def zu_stunden(bars, stunden, name):
         if out and out[-1]["t"] == start:
             k = out[-1]
             k["h"], k["l"], k["c"] = max(k["h"], b["h"]), min(k["l"], b["l"]), b["c"]
+            if b.get("roll"):
+                k["roll"] = True
         else:
-            neu = {"t": start, "et": start.astimezone(ET), "o": b["o"], "h": b["h"], "l": b["l"], "c": b["c"]}
+            neu = {"t": start, "et": start.astimezone(ET), "o": b["o"], "h": b["h"], "l": b["l"], "c": b["c"],
+                   "roll": bool(b.get("roll"))}
             if "tag" in b:
                 neu["tag"] = b["tag"]
             out.append(neu)
@@ -175,9 +226,28 @@ def zu_tageskerzen(bars, ende, name):
         tage = tage[:-1]
     return [
         {"t": gruppen[t][0]["t"], "et": gruppen[t][0]["et"], "tag": t, "o": gruppen[t][0]["o"],
-         "h": max(x["h"] for x in gruppen[t]), "l": min(x["l"] for x in gruppen[t]), "c": gruppen[t][-1]["c"]}
+         "h": max(x["h"] for x in gruppen[t]), "l": min(x["l"] for x in gruppen[t]), "c": gruppen[t][-1]["c"],
+         "roll": any(x.get("roll") for x in gruppen[t])}
         for t in tage
     ]
+
+
+def zu_wochenkerzen(bars, ende, name):
+    """Wochenkerze = Handelstage Montag..Freitag (CME: Sonntag 18:00 ET bis Freitag 17:00 ET; BTC Montag..Sonntag).
+    Rueckgabe: (geschlossene, alle inkl. laufender Woche)."""
+    gruppen = {}
+    for b in bars:
+        tag = handelstag(b)
+        gruppen.setdefault(tag - timedelta(days=tag.weekday()), []).append(b)
+    zu, alle = [], []
+    for w in sorted(gruppen):
+        g = gruppen[w]
+        k = {"t": g[0]["t"], "et": g[0]["et"], "tag": w, "o": g[0]["o"], "h": max(x["h"] for x in g),
+             "l": min(x["l"] for x in g), "c": g[-1]["c"], "roll": any(x.get("roll") for x in g)}
+        alle.append(k)
+        if ende is not None and ende >= tag_ende(name, w + timedelta(days=6 if name in UTC_SCHNITT else 4)):
+            zu.append(k)
+    return zu, alle
 
 
 
@@ -293,41 +363,184 @@ class Levels:
         return max(x["h"] for x in g) if hoch else min(x["l"] for x in g)
 
 
-def zonen_mit_zeit(d):
-    """Alle HTF-FVGs mit Entstehungszeit (Close der 3. Kerze) und IFVG-Zeit."""
-    raus = {}
-    for feld, tf in HTF_FVG_FELDER:
-        for f in d.get(feld) or []:
-            t = zeit(f.get("et"))
-            if t is None:
+# ============================================================ Zeitachse fuer Key Levels und Zonen (eigene)
+
+ZEITACHSEN_LEVELS = ("pdh", "pdl", "pwh", "pwl", "pmh", "pml",
+                     "asia_high", "asia_low", "london_high", "london_low", "ny_am_high", "ny_am_low")
+SESSION_NAMEN = ("asia", "london", "ny_am")
+
+
+def ist_hoch(lname):
+    return lname.endswith("h") or lname.endswith("high")
+
+
+def tag_start(name, tag):
+    """Beginn des Handelstags in UTC (CME: 18:00 ET am Vortag; BTC: 00:00 UTC)."""
+    if name in UTC_SCHNITT:
+        return datetime(tag.year, tag.month, tag.day, tzinfo=timezone.utc)
+    v = tag - timedelta(days=1)
+    return datetime(v.year, v.month, v.day, 18, tzinfo=ET).astimezone(timezone.utc)
+
+
+def session_fenster(tag, w):
+    """Beginn/Ende eines Session-Fensters des Handelstags in UTC."""
+    sh, sm, eh, em = w
+    st = tag - timedelta(days=1) if sh >= 18 else tag
+    return (datetime(st.year, st.month, st.day, sh, sm, tzinfo=ET).astimezone(timezone.utc),
+            datetime(tag.year, tag.month, tag.day, eh, em, tzinfo=ET).astimezone(timezone.utc))
+
+
+def level_ab(sym, lname, t):
+    """Ab wann existiert ein Level der Zeitachse (Tag 7: Session-Levels erst nach der Session)?"""
+    bar = {"t": t, "et": t.astimezone(ET)}
+    if sym in UTC_SCHNITT:
+        bar["tag"] = t.date()
+    tag = handelstag(bar)
+    if lname in ("pdh", "pdl"):
+        return tag_start(sym, tag)
+    if lname in ("pwh", "pwl"):
+        return tag_start(sym, tag - timedelta(days=tag.weekday()))
+    if lname in ("pmh", "pml"):
+        return tag_start(sym, tag.replace(day=1))
+    for p, w in Levels.SESS.items():
+        if lname.startswith(p):
+            return datetime(tag.year, tag.month, tag.day, w[2], w[3], tzinfo=ET).astimezone(timezone.utc)
+    return None
+
+
+def body_genommen(bars5_zu, preis, hoch, von, bis):
+    """Gab es in [von, bis) eine GESCHLOSSENE 5m-Kerze mit Body Close jenseits des Levels (Tag 3)?"""
+    return any(von <= x["t"] < bis and ((x["c"] > preis) if hoch else (x["c"] < preis)) for x in bars5_zu)
+
+
+class ZonenReg:
+    """Eigenes Zonenregister der HTF-FVGs (Tag 9/10/12/22): alle FVGs von
+    1w bis 30m, mit Entstehung, Inversion (Body Close derselben TF) und erster
+    Beruehrung (5m-genau). Eine Zone zaehlt nur, solange sie existiert, nicht
+    invertiert und noch nicht angetappt ist (unmediated, Nutzerentscheidung
+    29.09.2026)."""
+
+    def __init__(self, s):
+        self.feine = sorted(s.get("5m_alle") or [], key=lambda x: x["t"])
+        self.zeiten = [x["t"] for x in self.feine]
+        self.zonen = []
+        self._ft = {}
+        for tf, minuten in (("1w", None), ("1d", None), ("4h", 240), ("1h", 60), ("30m", 30)):
+            zu, alle = list(s.get(tf) or []), list(s.get(tf + "_alle") or [])
+            live = alle[len(zu):]
+            if tf == "1h":
+                zu = zu[-(FVG_1H_TAGE * 23):]
+            self._bilde(tf, zu, live, minuten)
+
+    def _bilde(self, tf, bars, live, minuten):
+        tf_min = TF_MIN[tf]
+        alle = list(bars) + list(live)
+        for i in range(len(bars) - 2):
+            a, m, c = bars[i], bars[i + 1], bars[i + 2]
+            if a.get("roll") or m.get("roll") or c.get("roll"):
                 continue
-            entsteht = t + timedelta(minutes=TF_MIN[tf])
-            raus[f"{tf}-FVG {f.get('von')}-{f.get('bis')}"] = {
-                "von": f.get("von"), "bis": f.get("bis"), "entsteht": entsteht,
-                "ifvg": zeit(f.get("ifvg_et")),
-            }
-    return raus
+            if minuten and (ist_luecke(a, m, minuten) or ist_luecke(m, c, minuten)):
+                continue
+            if c["l"] > a["h"]:
+                unten, oben, richtung = a["h"], c["l"], "bullish"
+            elif c["h"] < a["l"]:
+                unten, oben, richtung = c["h"], a["l"], "bearish"
+            else:
+                continue
+            entsteht = (c["t"] + timedelta(minutes=minuten)) if minuten else (
+                bars[i + 3]["t"] if i + 3 < len(bars) else c["t"] + timedelta(minutes=tf_min))
+            tap = next((x for x in alle[i + 3:] if x["l"] < oben and x["h"] > unten), None)
+            if richtung == "bullish":
+                inv = next((x for x in bars[i + 3:] if x["c"] < unten), None)
+            else:
+                inv = next((x for x in bars[i + 3:] if x["c"] > oben), None)
+            self.zonen.append({"tf": tf, "tf_min": tf_min, "von": round(unten, 2), "bis": round(oben, 2),
+                               "richtung": richtung, "entsteht": entsteht,
+                               "tap_grob": tap["t"] if tap else None, "inv": inv["t"] if inv else None})
+
+    def beruehrung(self, z):
+        k = id(z)
+        if k not in self._ft:
+            grob = z["tap_grob"]
+            if grob is None:
+                ft = None
+            elif not self.feine or grob + timedelta(minutes=z["tf_min"]) <= self.feine[0]["t"]:
+                ft = grob
+            else:
+                i = bisect.bisect_left(self.zeiten, z["entsteht"])
+                ft = next((x["t"] for x in self.feine[i:] if x["l"] < z["bis"] and x["h"] > z["von"]), grob)
+            self._ft[k] = ft
+        return self._ft[k]
+
+    def offen_bei(self, z, t):
+        if z["entsteht"] > t:
+            return False
+        if z["inv"] is not None and z["inv"] + timedelta(minutes=z["tf_min"]) <= t:
+            return False
+        ft = self.beruehrung(z)
+        return ft is None or ft >= t
+
+    def suche(self, tf, von, bis):
+        return [z for z in self.zonen if z["tf"] == tf and abs(z["von"] - von) <= TOL and abs(z["bis"] - bis) <= TOL]
+
+
+def zonen_name(tf, von, bis):
+    return f"{tf}-FVG {von}-{bis}"
+
+
+def zerlege_zonenname(text):
+    """'1h-FVG 30850.75-30880.5 (Oberkante)' -> ('1h', 30850.75, 30880.5) oder None."""
+    m = re.match(r"^(\w+)-FVG ([\d.]+)-([\d.]+)", text or "")
+    return (m.group(1), float(m.group(2)), float(m.group(3))) if m else None
+
+
+def key_level_bekannt(b, sym, d, lname, preis, s):
+    """Prueft, ob ein gemeldetes Level, das NICHT auf der Zeitachse liegt (Data/EQ/ITH/ITL),
+    ueberhaupt existiert. Rueckgabe: Fehlertext oder None."""
+    if lname.startswith("Data "):
+        for e in d.get("data_levels") or []:
+            if gleich(e.get("data_high"), preis) or gleich(e.get("data_low"), preis):
+                return None
+        return "Data High/Low nicht in data_levels auffindbar"
+    if "ITH" in lname or "ITL" in lname:
+        for e in d.get("ith_itl") or []:
+            if gleich(e.get("preis"), preis) and lname.startswith(e.get("art", "?")):
+                return None
+        return "ITH/ITL nicht in ith_itl auffindbar (ein nur gesweeptes Level muss dort noch stehen)"
+    if "EQH" in lname or "EQL" in lname:
+        hoch = "EQH" in lname
+        bars = s.get("1h") or []
+        sh, sl = swingpunkte(bars, 2)
+        idx = [i for i in (sh if hoch else sl) if gleich(bars[i]["h"] if hoch else bars[i]["l"], preis)]
+        if not idx:
+            return "kein 1h-Swing auf diesem Preis"
+        j = idx[-1]
+        vorher = [i for i in (sh if hoch else sl) if i < j
+                  and abs((bars[i]["h"] if hoch else bars[i]["l"]) - preis) / max(preis, 1e-9) < EQ_TOLERANZ]
+        return None if vorher else "kein zweiter gleich hoher/tiefer 1h-Swing davor"
+    return f"unbekannter Levelname '{lname}'"
 
 
 # ============================================================ Pruefungen
 
 def pruefe_key_levels(b, sym, d, s):
-    """Tag 7: PDH/PDL = High/Low der letzten geschlossenen Tageskerze."""
-    tage = {}
-    for x in s["30m_alle"]:
-        tage.setdefault(handelstag(x), []).append(x)
+    """Tag 7: PDH/PDL, PWH/PWL, PMH/PML aus den Bars nachgerechnet."""
     heute = datetime.strptime(d["handelstag"], "%Y-%m-%d").date()
-    vor = [t for t in sorted(tage) if t < heute]
-    if not vor:
-        b.hinweis(f"{sym} key_levels", "Tag 7", "zu wenige Handelstage zum Pruefen")
-        return
-    vortag = vor[-1]
-    for n, soll in (("pdh", max(x["h"] for x in tage[vortag])), ("pdl", min(x["l"] for x in tage[vortag]))):
+    lv = Levels(sym, s["30m_alle"])
+    t0 = tag_start(sym, heute) + timedelta(minutes=1)
+    for n in ("pdh", "pdl", "pwh", "pwl", "pmh", "pml"):
+        soll = lv.wert(n, t0)
         ist = (d.get("key_levels") or {}).get(n)
+        if soll is None:
+            if n in ("pdh", "pdl"):
+                b.hinweis(f"{sym} key_levels", "Tag 7", "zu wenige Handelstage zum Pruefen")
+            continue
         if gleich(ist, soll):
-            b.ok(f"{sym} {n}", "Tag 7", f"{ist} = Handelstag {vortag}")
+            b.ok(f"{sym} {n}", "Tag 7", f"{ist} nachgerechnet")
         else:
-            b.fehler(f"{sym} {n}", "Tag 7", f"levels.json sagt {ist}, aus den Bars ergibt sich {round(soll, 2)} (Handelstag {vortag})")
+            b.fehler(f"{sym} {n}", "Tag 7", f"levels.json sagt {ist}, aus den Bars ergibt sich {round(soll, 2)}")
+
+
 
 
 def pruefe_level_status(b, sym, d, s):
@@ -461,7 +674,7 @@ def pruefe_range(b, sym, d, s):
     """Tag 11: Fib von Swing Low zu Swing High einer noch nicht bis
     Equilibrium rebalancierten Range; OTE 0,62-0,79, GP Mitte. Der Preis muss
     innerhalb der Range liegen (F14: Range wird bei neuem Extrem nachgezogen)."""
-    for feld, tf in (("range_ote", "30m"), ("range_ote_1h", "1h"), ("range_ote_4h", "4h"), ("range_ote_1d", "1d")):
+    for feld, tf in (("range_ote", "30m"), ("range_ote_1h", "1h"), ("range_ote_4h", "4h"), ("range_ote_1d", "1d"), ("range_ote_1w", "1w")):
         r = d.get(feld)
         zu, alle = s.get(tf) or [], s.get(tf + "_alle") or []
         if not r or not zu:
@@ -530,7 +743,7 @@ def pruefe_range(b, sym, d, s):
 
 def pruefe_trend(b, sym, d, s):
     """Tag 3/4: tragender Swing und CISD auf geschlossenen Kerzen."""
-    for feld, tf in (("trend_1d", "1d"), ("trend_4h", "4h"), ("trend_1h", "1h"), ("trend_30m", "30m")):
+    for feld, tf in (("trend_1w", "1w"), ("trend_1d", "1d"), ("trend_4h", "4h"), ("trend_1h", "1h"), ("trend_30m", "30m")):
         t, bars = d.get(feld), s.get(tf) or []
         if not t or not bars or t.get("richtung") in (None, "unklar"):
             continue
@@ -585,7 +798,7 @@ def pruefe_trend(b, sym, d, s):
 
 def pruefe_struktur(b, sym, d, s):
     """Tag 4: BOS mit dem Trend, MSS gegen den Trend, immer Body Close."""
-    for feld, tf in (("struktur_1d", "1d"), ("struktur_4h", "4h"), ("struktur_1h", "1h"), ("struktur_30m", "30m")):
+    for feld, tf in (("struktur_1w", "1w"), ("struktur_1d", "1d"), ("struktur_4h", "4h"), ("struktur_1h", "1h"), ("struktur_30m", "30m")):
         bars = s.get(tf) or []
         liste = d.get(feld) or []
         for e in liste:
@@ -659,10 +872,18 @@ def pruefe_equal_levels(b, sym, d, s):
         b.ok(k, "Tag 7", "offen, Bezeichnung passt")
 
 
-def pruefe_rejection_blocks(b, sym, d, s):
-    """Tag 12: Wick am Level, Body diesseits, Body Close in die Gegenrichtung
-    (auch in der naechsten Kerze), nur geschlossene Kerzen."""
+def zone_belegt(reg, tf, von, bis, t, zeit_bedingung="offen"):
+    """Gibt es eine Zone tf/von/bis, die bei t offen (existent, nicht invertiert, unmediated) war?"""
+    return any(reg.offen_bei(z, t) for z in reg.suche(tf, von, bis))
+
+
+def pruefe_rejection_blocks(b, sym, d, s, lv, reg):
+    """Tag 12: Wick am HTF Key Level, Body diesseits, Body Close in die
+    Gegenrichtung (auch in der naechsten Kerze), nur geschlossene Kerzen.
+    'Starke Reaction' = Wick > RB_WICK_ANTEIL der Spanne (Register). Das Level
+    muss zur Kerzenzeit existiert haben (Zeitachse bzw. offene HTF-FVG)."""
     bars = s["30m"]
+    zu5 = s["5m"]
     for e in d.get("rejection_blocks_30m") or []:
         k = f"{sym} RB {e.get('richtung')} {e.get('et')}"
         idx = index_zu_zeit(bars, e.get("et"))
@@ -671,34 +892,54 @@ def pruefe_rejection_blocks(b, sym, d, s):
             continue
         x, nxt = bars[idx], bars[idx + 1]
         kopf, fuss = max(x["o"], x["c"]), min(x["o"], x["c"])
+        spanne = max(x["h"] - x["l"], 1e-9)
+        lp, lname = e.get("level_preis"), e.get("level") or ""
         if e.get("richtung") == "bearish":
             wick = gleich(x["h"], e.get("bis"))
             body = e.get("von") is None or abs(kopf - e["von"]) <= TOL
             close = x["c"] < x["o"] or nxt["c"] < nxt["o"]
+            am_level = lp is not None and x["h"] >= lp - TOL and lp > kopf - TOL
+            stark = (x["h"] - kopf) / spanne > RB_WICK_ANTEIL
+            hoch = True
         else:
             wick = gleich(x["l"], e.get("von"))
             body = e.get("bis") is None or abs(fuss - e["bis"]) <= TOL
             close = x["c"] > x["o"] or nxt["c"] > nxt["o"]
+            am_level = lp is not None and x["l"] <= lp + TOL and lp < fuss + TOL
+            stark = (fuss - x["l"]) / spanne > RB_WICK_ANTEIL
+            hoch = False
         fehlt = [t for ok, t in ((wick, "Wick passt nicht zur Kerze"), (body, "Body-Grenze passt nicht"),
-                                 (close, "kein Body Close in die Gegenrichtung")) if not ok]
+                                 (close, "kein Body Close in die Gegenrichtung"),
+                                 (am_level, "Level liegt nicht im Wick der Kerze"),
+                                 (stark, "Wick nicht groesser als der Mindestanteil der Spanne")) if not ok]
+        # Existiert das Level zur Kerzenzeit?
+        if lp is not None and not fehlt:
+            zone = zerlege_zonenname(lname)
+            if zone:
+                if not zone_belegt(reg, *zone, x["t"]):
+                    fehlt.append("HTF-FVG war zu diesem Zeitpunkt nicht offen (unmediated, nicht invertiert)")
+            else:
+                roh = lname.split()[0]
+                if roh in ZEITACHSEN_LEVELS:
+                    w = lv.wert(roh, x["t"])
+                    if w is None or not gleich(w, lp):
+                        fehlt.append(f"{roh} zur Kerzenzeit {None if w is None else round(w, 2)}, gemeldet {lp}")
+                    else:
+                        seit = level_ab(sym, roh, x["t"])
+                        if seit and body_genommen(zu5, lp, hoch, seit, x["t"]):
+                            fehlt.append(f"{roh} war zur Kerzenzeit schon per Body Close genommen")
+                else:
+                    fehl = key_level_bekannt(b, sym, d, lname, lp, s)
+                    if fehl and not (fehl.startswith("ITH/ITL nicht") or fehl.startswith("Data High/Low nicht")
+                                     or fehl.startswith("kein")):
+                        fehlt.append(fehl)
+                    elif fehl:
+                        # ein spaeter genommenes Level steht evtl. nicht mehr in den Anzeigelisten
+                        b.hinweis(k, "Tag 12", f"Level '{lname}' nur eingeschraenkt pruefbar: {fehl}")
         if fehlt:
             b.fehler(k, "Tag 12", "; ".join(fehlt))
         else:
-            b.ok(k, "Tag 12", "Wick am Level, Body diesseits, Gegen-Close vorhanden")
-
-
-def pruefe_sponsorship(b, sym, d):
-    """Tag 22: Die Sponsor-Quelle muss mindestens 30 Minuten sein."""
-    for feld in ("fvg_15m", "fvg_5m"):
-        for f in d.get(feld) or []:
-            if not f.get("gesponsort"):
-                continue
-            k = f"{sym} {feld} {f.get('von')}-{f.get('bis')}"
-            sp = f.get("sponsor") or ""
-            if sp.startswith(("5m", "15m")):
-                b.fehler(k, "Tag 22", f"Sponsor '{sp}' liegt unter 30 Minuten")
-            else:
-                b.ok(k, "Tag 22", f"Sponsor '{sp}' ist eine zulaessige HTF-Quelle")
+            b.ok(k, "Tag 12", "Wick am Level, Body diesseits, Gegen-Close vorhanden, Level existierte")
 
 
 def pruefe_nwog(b, sym, d, s):
@@ -716,67 +957,180 @@ def pruefe_nwog(b, sym, d, s):
         b.fehler(k, "Tag 20", f"gefuellt gemeldet {g.get('gefuellt')}, aus den Bars {voll}")
 
 
-def pruefe_manipulation(b, sym, d, s, lv, zonen):
-    """Tag 19/23/24: Belege der Manipulation. Frueher: jeder TM-Beleg muss ein
-    Sweep oder ein HTF-FVG-Tap sein. Jetzt nach der Festlegung mit Salzmir
-    (gleiches Manipulations-Leg): Sweep im Leg ohne Body Close, bzw. Tap in ein
-    HTF-FVG, das bei Leg-Beginn existierte und bis Leg-Ende nicht invertiert war."""
+def pruefe_sponsorship(b, sym, d, s, lv, reg):
+    """Tag 22: Quelle mindestens 30 Minuten. Leg-Start und Sponsor werden
+    nachgerechnet: Leg = tiefstes Tief (bullish) bzw. hoechstes Hoch (bearish)
+    der letzten SPONSOR_RUECKBLICK Kerzen bis zum FVG; Sponsor = damals offene
+    HTF-FVG, die den Preis enthaelt, oder Sweep eines damals existierenden Key Levels."""
+    for feld, tf in (("fvg_15m", "15m"), ("fvg_5m", "5m")):
+        zu = s.get(tf) or []
+        zu5 = s["5m"]
+        for f in d.get(feld) or []:
+            if not f.get("gesponsort"):
+                continue
+            k = f"{sym} {feld} {f.get('von')}-{f.get('bis')}"
+            sp = f.get("sponsor") or ""
+            if sp.startswith(("5m", "15m")):
+                b.fehler(k, "Tag 22", f"Sponsor '{sp}' liegt unter 30 Minuten")
+                continue
+            idx = finde_sequenz(zu, f["von"], f["bis"], f.get("et"))
+            if idx is None:
+                b.fehler(k, "Tag 9", "FVG nicht als 3-Kerzen-Sequenz belegbar")
+                continue
+            fenster = zu[max(0, idx - SPONSOR_RUECKBLICK): idx + 1]
+            bull = f.get("richtung") == "bullish"
+            start = min(fenster, key=lambda x: x["l"]) if bull else max(fenster, key=lambda x: x["h"])
+            if f.get("leg_start_et") != start["et"].strftime(ZF):
+                b.fehler(k, "Tag 22", f"Leg-Start {f.get('leg_start_et')}, nachgerechnet {start['et'].strftime(ZF)}")
+                continue
+            preis = start["l"] if bull else start["h"]
+            zone = zerlege_zonenname(sp)
+            if sp.startswith("Sweep"):
+                m = re.match(r"^Sweep (.+) \(([\d.]+)\)$", sp)
+                if not m:
+                    b.fehler(k, "Tag 22", f"Sponsor '{sp}' nicht lesbar")
+                    continue
+                lname, lp = m.group(1), float(m.group(2))
+                hoch = ist_hoch(lname) if lname in ZEITACHSEN_LEVELS else ("EQH" in lname or "ITH" in lname or "High" in lname)
+                sweep = (start["h"] > lp >= max(start["o"], start["c"])) if hoch else (start["l"] < lp <= min(start["o"], start["c"]))
+                if not sweep:
+                    b.fehler(k, "Tag 3/22", f"Kerze {start['et'].strftime(ZF)} ist kein Sweep von {lname} ({lp})")
+                    continue
+                if lname in ZEITACHSEN_LEVELS:
+                    w = lv.wert(lname, start["t"])
+                    seit = level_ab(sym, lname, start["t"])
+                    if w is None or not gleich(w, lp):
+                        b.fehler(k, "Tag 22", f"{lname} existierte zum Leg-Start nicht/anders ({w})")
+                        continue
+                    if seit and body_genommen(zu5, lp, hoch, seit, start["t"]):
+                        b.fehler(k, "Tag 22", f"{lname} war zum Leg-Start schon per Body Close genommen")
+                        continue
+                b.ok(k, "Tag 22", f"Sweep {lname} am Leg-Start belegt")
+            elif zone:
+                ztf, von, bis = zone
+                if not (von - TOL <= preis <= bis + TOL):
+                    b.fehler(k, "Tag 22", f"Leg-Start {preis} liegt nicht in {sp}")
+                elif not zone_belegt(reg, ztf, von, bis, start["t"]):
+                    b.fehler(k, "Tag 22", f"{sp} war zum Leg-Start nicht offen (unmediated, nicht invertiert)")
+                else:
+                    b.ok(k, "Tag 22", f"Sponsor '{sp}' offen und Leg startet darin")
+            else:
+                b.fehler(k, "Tag 22", f"Sponsor '{sp}' nicht lesbar")
+
+
+def sweep_kerzen(bars5, ws, we, zu5, lv, sym):
+    """Erwartete Sweeps der Zeitachsen-Levels im Fenster [ws, we): Level -> Kerzenzeit (erste)."""
+    raus = {}
+    for x in bars5:
+        if not (ws <= x["t"] < we):
+            continue
+        for n in ZEITACHSEN_LEVELS:
+            if n in raus:
+                continue
+            w = lv.wert(n, x["t"])
+            if w is None:
+                continue
+            hoch = ist_hoch(n)
+            if not ((x["h"] > w) if hoch else (x["l"] < w)):
+                continue
+            seit = level_ab(sym, n, x["t"])
+            if seit is None or body_genommen(zu5, w, hoch, seit, x["t"]):
+                continue
+            if body_genommen(zu5, w, hoch, x["t"], we):
+                continue
+            raus[n] = x["t"]
+    return raus
+
+
+def pruefe_manipulation(b, sym, d, s, lv, reg):
+    """Tag 19: Manipulation = Bewegung in ein HTF Key Level bzw. Liquidity
+    Sweep, je Session einzeln (Register "manipulations_leg"). Jede gemeldete
+    Sweep-/Tap-Angabe wird belegt, und fuer Zeitachsen-Levels und HTF-FVGs wird
+    auch die Vollstaendigkeit nachgerechnet."""
     m = d.get("manipulations_leg")
-    if not m or "richtung" not in m:
+    if not m:
         return
-    k = f"{sym} Manipulations-Leg"
-    start, ende = zeit(m.get("start_et")), zeit(m.get("ende_et"))
-    runter = m["richtung"] == "nach unten"
-    heute = [x for x in s["5m_alle"] if handelstag(x).isoformat() == d.get("handelstag")]
-    if not heute or start is None or ende is None:
-        b.hinweis(k, "Tag 23", "nicht pruefbar")
+    if m.get("basis") != "5m":
+        b.hinweis(f"{sym} Manipulation", "Tag 19", f"nur auf {m.get('basis')} berechnet, nicht pruefbar")
         return
-    hoch = max(heute, key=lambda x: x["h"])
-    tief = min(heute, key=lambda x: x["l"])
-    erst = tief if tief["t"] < hoch["t"] else hoch
-    if erst["t"] != ende or (erst is tief) != runter:
-        b.fehler(k, "Tag 23", "Leg-Ende/Richtung passt nicht zum zuerst gedruckten Extrem")
-        return
-    leg = [x for x in heute if start <= x["t"] <= ende]
-    fehler = []
-    for name in m.get("sweeps") or []:
-        treffer = False
-        # Festlegung W6: das Level muss schon zu Leg-Beginn existiert haben.
-        w = lv.wert(name, start)
-        if w is None:
-            fehler.append(f"Sweep {name}: Level existierte bei Leg-Beginn noch nicht")
+    heute = datetime.strptime(d["handelstag"], "%Y-%m-%d").date()
+    k5, zu5 = s["5m_alle"], s["5m"]
+    for sname, sess in (m.get("sessions") or {}).items():
+        if sess is None:
             continue
-        for x in leg:
-            if w is not None and ((x["l"] < w) if runter else (x["h"] > w)):
-                zu = [y for y in s["5m"] if x["t"] <= y["t"] <= ende]
-                if not any((y["c"] < w) if runter else (y["c"] > w) for y in zu):
-                    treffer = True
-                    break
-        if not treffer:
-            fehler.append(f"Sweep {name} im Leg nicht belegt")
-    for name in m.get("fvg_taps") or []:
-        z = zonen.get(name)
-        if z is None:
-            fehler.append(f"{name} nicht in den FVG-Listen")
-            continue
-        if z["entsteht"] > start:
-            fehler.append(f"{name} entstand erst im Leg")
-        if z["ifvg"] is not None and z["ifvg"] <= ende:
-            fehler.append(f"{name} war vor Leg-Ende invertiert")
-        ext = m.get("extrem")
-        if ext is None:
-            fehler.append("Leg-Extrem fehlt")
-            continue
-        if (runter and not ext <= z["bis"]) or (not runter and not ext >= z["von"]):
-            fehler.append(f"{name} vom Leg nicht erreicht")
-    if fehler:
-        b.fehler(k, "Tag 19/24", "; ".join(fehler))
-    else:
-        b.ok(k, "Tag 19/23", "Leg und Belege zeitlich belegt")
+        k = f"{sym} Manipulation {sname}"
+        if sname == "tag":
+            ws = tag_start(sym, heute)
+            we = ws + timedelta(days=1)
+        else:
+            ws, we = session_fenster(heute, Levels.SESS[sname])
+        fehler = []
+        for sw in sess.get("sweeps") or []:
+            t = zeit(sw.get("et"))
+            bar = next((x for x in k5 if x["t"] == t), None)
+            n, p = sw.get("level"), sw.get("preis")
+            hoch = sw.get("seite") == "high"
+            if bar is None or not (ws <= bar["t"] < we):
+                fehler.append(f"Sweep {n}: Kerze {sw.get('et')} nicht in der Session")
+                continue
+            if not ((bar["h"] > p) if hoch else (bar["l"] < p)):
+                fehler.append(f"Sweep {n}: Kerze {sw.get('et')} wickt nicht ueber/unter {p}")
+                continue
+            seit = zeit(sw.get("level_seit_et"))
+            if seit is None or seit > bar["t"]:
+                fehler.append(f"Sweep {n}: Level entsteht erst nach der Kerze")
+                continue
+            if body_genommen(zu5, p, hoch, seit, bar["t"]):
+                fehler.append(f"Sweep {n}: Level war vor der Kerze schon per Body Close genommen")
+                continue
+            if body_genommen(zu5, p, hoch, bar["t"], we):
+                fehler.append(f"Sweep {n}: Level wird bis Session-Ende per Body Close genommen (kein Sweep)")
+                continue
+            if n in ZEITACHSEN_LEVELS:
+                w = lv.wert(n, bar["t"])
+                if w is None or not gleich(w, p):
+                    fehler.append(f"Sweep {n}: Levelwert zur Kerzenzeit {None if w is None else round(w, 2)}, gemeldet {p}")
+                if sname != "tag" and n.startswith(sname):
+                    fehler.append(f"Sweep {n}: Level der eigenen Session zaehlt nicht")
+            else:
+                fehl = key_level_bekannt(b, sym, d, n, p, s)
+                if fehl:
+                    fehler.append(f"Sweep {n}: {fehl}")
+        gemeldet = {sw.get("level") for sw in sess.get("sweeps") or [] if sw.get("level") in ZEITACHSEN_LEVELS}
+        soll = set(sweep_kerzen(k5, ws, we, zu5, lv, sym)) if sname != "tag" else set()
+        soll = {n for n in soll if not n.startswith(sname)}
+        if soll != gemeldet:
+            fehler.append(f"Sweeps der Zeitachsen-Levels: gemeldet {sorted(gemeldet)}, nachgerechnet {sorted(soll)}")
+        ist_taps = set()
+        for tp in sess.get("fvg_taps") or []:
+            t = zeit(tp.get("et"))
+            zs = reg.suche(tp.get("tf"), tp.get("von"), tp.get("bis"))
+            ok = [z for z in zs if reg.offen_bei(z, ws) and reg.beruehrung(z) == t and ws <= t < we]
+            if not ok:
+                fehler.append(f"Tap {tp.get('zone')}: Zone war zum Session-Beginn nicht offen oder wurde nicht um {tp.get('et')} zuerst beruehrt")
+            ist_taps.add((tp.get("tf"), tp.get("von"), tp.get("bis")))
+        soll_taps = {(z["tf"], z["von"], z["bis"]) for z in reg.zonen
+                     if reg.offen_bei(z, ws) and reg.beruehrung(z) is not None and ws <= reg.beruehrung(z) < we}
+        fehlt = soll_taps - ist_taps
+        zu_viel = ist_taps - soll_taps
+        if fehlt:
+            fehler.append(f"HTF-FVG-Taps nicht gemeldet: {sorted(fehlt)[:4]}")
+        if zu_viel:
+            fehler.append(f"HTF-FVG-Taps ohne Beleg: {sorted(zu_viel)[:4]}")
+        if bool(sess.get("hat_manipuliert")) != bool(sess.get("sweeps") or sess.get("fvg_taps")):
+            fehler.append("hat_manipuliert passt nicht zu Sweeps/Taps")
+        if fehler:
+            b.fehler(k, "Tag 19", "; ".join(fehler))
+        else:
+            b.ok(k, "Tag 19", f"{'manipuliert' if sess.get('hat_manipuliert') else 'keine Manipulation'} - Belege und Vollstaendigkeit nachgerechnet")
+    soll_gesamt = any((x or {}).get("hat_manipuliert") for x in (m.get("sessions") or {}).values())
+    if bool(m.get("hat_manipuliert")) != soll_gesamt:
+        b.fehler(f"{sym} Manipulation", "Tag 19", "hat_manipuliert (gesamt) passt nicht zu den Sessions")
 
 
 def pruefe_smt_tm(b, d):
-    """Tag 13: SMT = auf 5m eine Seite sweep, andere unberuehrt. Tag 24: TM = beide im Leg manipuliert."""
+    """Tag 13: SMT = auf 5m eine Seite sweep, andere unberuehrt. Tag 24:
+    True Manipulation = NQ und ES manipulieren in derselben Session (Q3 Option B)."""
     v = d.get("nq_vs_es")
     if not v:
         return
@@ -789,60 +1143,67 @@ def pruefe_smt_tm(b, d):
             b.ok(f"SMT {e['level']}", "Tag 13", f"5m: NQ {a} / ES {c}")
         else:
             b.fehler(f"SMT {e['level']}", "Tag 13", f"5m-Status NQ '{a}' / ES '{c}' ist keine Sweep-Divergenz")
-    ma = (d.get("nq") or {}).get("manipulations_leg") or {}
-    me = (d.get("es") or {}).get("manipulations_leg") or {}
-    beide = bool(ma.get("hat_manipuliert")) and bool(me.get("hat_manipuliert"))
-    if bool(v.get("true_manipulation")) == beide:
-        b.ok("True Manipulation", "Tag 24", f"{'ja' if beide else 'nein'} - passt zu beiden Manipulations-Legs")
+    ma = ((d.get("nq") or {}).get("manipulations_leg") or {}).get("sessions") or {}
+    me = ((d.get("es") or {}).get("manipulations_leg") or {}).get("sessions") or {}
+    soll = sorted(n for n in SESSION_NAMEN if (ma.get(n) or {}).get("hat_manipuliert") and (me.get(n) or {}).get("hat_manipuliert"))
+    ist = sorted(e.get("session") for e in v.get("true_manipulation") or [])
+    if soll == ist:
+        b.ok("True Manipulation", "Tag 24", f"{ist or 'keine'} - passt zu den Sessions beider Pairs")
     else:
-        b.fehler("True Manipulation", "Tag 24", "Meldung passt nicht zu den Manipulations-Legs beider Pairs")
+        b.fehler("True Manipulation", "Tag 24", f"gemeldet {ist}, aus den Sessions beider Pairs {soll}")
 
 
-def pruefe_daily_profile(b, d, lv, zonen, s):
-    """Tag 19: Profil 2 vs 3 haengt daran, ob London ein HTF Key Level getappt
-    hat. Gezaehlt werden (Festlegung F6/B7) nur Tages-/Wochen-/Monatslevels
-    und HTF-FVGs, die VOR London existierten; Profil 2 verlangt zusaetzlich,
-    dass London das bisherige Tageshoch oder -tief gebildet hat. Der
-    Asia-Sweep steht getrennt."""
+def pruefe_daily_profile(b, d, s):
+    """Tag 19: Profil aus den Session-Werten nachgerechnet. 'London manipuliert
+    in ein HTF Key Level' = London-Session der Manipulationsbestimmung (dort
+    belegt); Profil 2 verlangt zusaetzlich Tageshoch/-tief in London; ohne
+    Manipulation entscheidet die Staerke (Register "daily_profile")."""
     p = d.get("daily_profile")
     nq = d.get("nq") or {}
-    if not p or "london_hat_htf_key_level_getappt" not in p:
+    if not p:
         return
+    lm = (((nq.get("manipulations_leg") or {}).get("sessions") or {}).get("london"))
     sess = nq.get("sessions_heute") or {}
     london, asia = sess.get("london"), sess.get("asia")
-    heute = [x for x in s["30m_alle"] if handelstag(x).isoformat() == nq.get("handelstag")]
-    lb = [x for x in heute if in_fenster(x, 2, 0, 6, 0)]
-    if not (london and asia and lb):
+    prof = p.get("profil", "")
+    if not (london and asia) or lm is None:
+        if prof.startswith("noch nicht bestimmbar"):
+            b.ok("Daily Profile", "Tag 19", "noch nicht bestimmbar (London/Asia ohne Kerzen)")
+        else:
+            b.fehler("Daily Profile", "Tag 19", f"Profil '{prof[:40]}' gemeldet, obwohl London/Asia fehlen")
         return
-    lstart = lb[0]["t"]
-    getappt = []
-    for n in ("pdh", "pdl", "pwh", "pwl", "pmh", "pml"):
-        v = lv.wert(n, lstart)
-        if v is not None and london["low"] <= v <= london["high"]:
-            getappt.append(n)
-    for name, z in zonen.items():
-        if z["entsteht"] <= lstart and (z["ifvg"] is None or z["ifvg"] > lstart):
-            if london["low"] <= z["bis"] and london["high"] >= z["von"]:
-                getappt.append(name)
-    gemeldet = p.get("london_hat_htf_key_level_getappt") or []
-    if sorted(getappt) != sorted(gemeldet):
-        b.fehler("Daily Profile", "Tag 19", f"getappt laut levels.json {sorted(gemeldet)}, nachgerechnet {sorted(getappt)}")
+    heute = [x for x in s["30m_alle"] if handelstag(x).isoformat() == nq.get("handelstag")]
+    getappt = sorted([x["level"] for x in lm.get("sweeps") or []] + [x["zone"] for x in lm.get("fvg_taps") or []])
+    if "london_hat_htf_key_level_getappt" in p and sorted(p["london_hat_htf_key_level_getappt"]) != getappt:
+        b.fehler("Daily Profile", "Tag 19", f"getappt {sorted(p['london_hat_htf_key_level_getappt'])} passt nicht zur London-Manipulation {getappt}")
         return
     sweep = london["high"] > asia["high"] or london["low"] < asia["low"]
     if bool(p.get("london_hat_asia_gesweept")) != sweep:
         b.fehler("Daily Profile", "Tag 19", f"london_hat_asia_gesweept gemeldet {p.get('london_hat_asia_gesweept')}, aus den Bars {sweep}")
         return
-    hod = abs(london["high"] - max(x["h"] for x in heute)) < 1e-9
-    lod = abs(london["low"] - min(x["l"] for x in heute)) < 1e-9
-    prof = p.get("profil", "")
-    if not sweep and not getappt:
-        soll = "1"
-    elif getappt and (hod or lod):
-        soll = "2"
-    elif getappt:
-        soll = "offen"
+    if not lm.get("beendet") and not getappt:
+        soll = "noch nicht bestimmbar"
     else:
-        soll = "3"
+        hod = abs(london["high"] - max(x["h"] for x in heute)) < 1e-9
+        lod = abs(london["low"] - min(x["l"] for x in heute)) < 1e-9
+        spanne = london["high"] - london["low"]
+        tage = {}
+        for x in s["30m_alle"]:
+            if in_fenster(x, 2, 0, 6, 0):
+                tage.setdefault(handelstag(x), []).append(x)
+        spannen = [max(y["h"] for y in g) - min(y["l"] for y in g)
+                   for t, g in sorted(tage.items()) if t.isoformat() < nq.get("handelstag")][-20:]
+        median = sorted(spannen)[len(spannen) // 2] if len(spannen) >= 5 else None
+        stark = bool(median and spanne >= LONDON_STARK_FAKTOR * median
+                     and abs(london["close"] - london["open"]) >= LONDON_RICHTUNG_ANTEIL * spanne)
+        if getappt and (hod or lod):
+            soll = "2"
+        elif getappt:
+            soll = "offen"
+        elif stark:
+            soll = "3"
+        else:
+            soll = "1"
     if prof.startswith(soll):
         b.ok("Daily Profile", "Tag 19", f"'{prof[:40]}' passt zu den Session-Werten")
     else:
@@ -862,44 +1223,63 @@ def pruefe_po3(b, d):
         b.fehler("PO3", "Tag 23", f"Zeitpunkte ergeben {soll}, gemeldet '{p.get('form')}'")
 
 
-def pruefe_stacked_po3(b, sym, d, s, lv, zonen):
-    """Tag 23: hat_manipuliert muss zu den 15m-Kerzen passen. Manipulation =
-    die Kerze erreicht neu ein Key Level, das vor ihr existierte und noch nicht
-    per Body Close gebrochen war (ohne die NY-AM-Levels, die diese Kerzen selbst
-    bilden), bzw. ein HTF-FVG, das vor ihr existierte und nicht invertiert war."""
+def pruefe_stacked_po3(b, sym, d, s, lv, reg):
+    """Tag 23: hat_manipuliert je 15m-Kerze. Manipulation = die Kerze erreicht
+    neu (stand die Kerze davor nicht schon dort) ein Key Level, das vor ihr
+    existierte und noch nicht per Body Close genommen war (ohne die NY-AM-Levels,
+    die diese Kerzen selbst bilden), bzw. eine damals offene HTF-FVG, die diese
+    Kerze zum ersten Mal beruehrt. Zeitachsen-Levels und HTF-FVGs werden
+    vollstaendig nachgerechnet; Data/EQ/ITH/ITL-Levels nur, wenn gemeldet."""
     st = d.get("stacked_po3")
     bars = s.get("15m_alle") or []
     if not st or not bars:
         return
+    zu5 = s["5m"]
     tag = [x for x in bars if handelstag(x).isoformat() == d.get("handelstag")]
-    namen = ("pdh", "pdl", "pwh", "pwl", "pmh", "pml", "asia_high", "asia_low", "london_high", "london_low")
-    for k in st.get("kerzen") or []:
-        treffer = [i for i, x in enumerate(tag) if x["et"].strftime("%H:%M") == k.get("kerze")]
+    for kk in st.get("kerzen") or []:
+        treffer = [i for i, x in enumerate(tag) if x["et"].strftime("%H:%M") == kk.get("kerze")]
         if not treffer:
             continue
         i = treffer[-1]
-        x, vorher = tag[i], tag[:i]
-        davor = vorher[-1] if vorher else None
-        getappt = False
-        for n in namen:
+        x = tag[i]
+        davor = tag[i - 1] if i > 0 else None
+        soll_namen, fehler = set(), []
+        for n in ZEITACHSEN_LEVELS:
+            if n.startswith("ny_am"):
+                continue
             v = lv.wert(n, x["t"])
             if v is None:
                 continue
-            oben = n.endswith("h") or n.endswith("high")
-            gebrochen = any((y["c"] > v) if oben else (y["c"] < v) for y in vorher)
+            seit = level_ab(sym, n, x["t"])
             schon = davor is not None and davor["l"] <= v <= davor["h"]
-            if not gebrochen and not schon and x["l"] <= v <= x["h"]:
-                getappt = True
-        for z in zonen.values():
-            if z["entsteht"] > x["t"] or (z["ifvg"] is not None and z["ifvg"] <= x["t"]):
-                continue
-            schon = davor is not None and davor["l"] <= z["bis"] and davor["h"] >= z["von"]
-            if not schon and x["l"] <= z["bis"] and x["h"] >= z["von"]:
-                getappt = True
-        if bool(k.get("hat_manipuliert")) != getappt:
-            b.fehler(f"{sym} Stacked PO3 {k.get('kerze')}", "Tag 23", f"hat_manipuliert gemeldet {k.get('hat_manipuliert')}, aus den Bars {getappt}")
-            continue
-        b.ok(f"{sym} Stacked PO3 {k.get('kerze')}", "Tag 23", f"Manipulation={getappt} stimmt mit den 15m-Bars ueberein")
+            if seit and not schon and x["l"] <= v <= x["h"] and not body_genommen(zu5, v, ist_hoch(n), seit, x["t"]):
+                soll_namen.add(n)
+        for z in reg.zonen:
+            if reg.offen_bei(z, x["t"]) and reg.beruehrung(z) is not None and x["t"] <= reg.beruehrung(z) < x["t"] + timedelta(minutes=15):
+                soll_namen.add(zonen_name(z["tf"], z["von"], z["bis"]))
+        ist_namen = {e["level"] for e in kk.get("getappt_details") or []}
+        statisch = {n for n in ist_namen if n not in ZEITACHSEN_LEVELS and not zerlege_zonenname(n)}
+        for e in kk.get("getappt_details") or []:
+            n = e["level"]
+            if n in ZEITACHSEN_LEVELS:
+                w = lv.wert(n, x["t"])
+                if w is None or not gleich(w, e.get("preis")):
+                    fehler.append(f"{n} zur Kerzenzeit {None if w is None else round(w, 2)}, gemeldet {e.get('preis')}")
+            elif not zerlege_zonenname(n):
+                if not (x["l"] - TOL <= e.get("preis", 1e18) <= x["h"] + TOL):
+                    fehler.append(f"{n} liegt nicht in der Kerze")
+                fehl = key_level_bekannt(b, sym, d, n, e.get("preis"), s)
+                if fehl:
+                    fehler.append(f"{n}: {fehl}")
+        nur_belegt = ist_namen - statisch
+        if nur_belegt != soll_namen:
+            fehler.append(f"Zeitachsen-Levels/HTF-FVGs: gemeldet {sorted(nur_belegt)}, nachgerechnet {sorted(soll_namen)}")
+        if bool(kk.get("hat_manipuliert")) != bool(ist_namen):
+            fehler.append("hat_manipuliert passt nicht zu getappt_details")
+        if fehler:
+            b.fehler(f"{sym} Stacked PO3 {kk.get('kerze')}", "Tag 23", "; ".join(fehler))
+        else:
+            b.ok(f"{sym} Stacked PO3 {kk.get('kerze')}", "Tag 23", f"Manipulation={bool(ist_namen)} stimmt mit den Bars ueberein")
 
 
 def pruefe_vwap(b, sym, d, s):
@@ -976,7 +1356,7 @@ def pruefe_daten_frisch(b, d):
 
 # ============================================================ Lauf
 
-def serien_bauen(name, rolls, stand):
+def serien_bauen(name, rolls, stand, roll_modus="roh"):
     """
     Wie in analyse.py::htf_kerzen: zwei verschiedene Fragen, zwei verschiedene
     Zeitbasen. Ob die zuletzt gefetchte EINZELNE Kerze (5m/15m/30m/1h) schon
@@ -992,10 +1372,14 @@ def serien_bauen(name, rolls, stand):
     identischer Zeitbasis rechnen.
     """
     s = {}
+    roh = {suf: lade_bars(name, suf) for suf in ("5m", "15m", "30m", "1h")}
+    roh["1h"] = (fuelle_luecken(roh["30m"][0], roh["1h"][0], 60), roh["1h"][1])
     for suf, mi in (("5m", 5), ("15m", 15), ("30m", 30), ("1h", 60)):
-        alle, tick = lade_bars(name, suf)
+        alle, tick = roh[suf]
         if name in ("nq", "es"):
-            rolls_anwenden(alle, rolls, name, mi)
+            if roll_modus == "bereinigt":
+                rolls_anwenden(alle, rolls, name, mi)
+            rolls_markieren(alle, rolls, mi)
         ende = min(tick, stand) if tick and stand else (tick or stand)
         s[suf + "_alle"] = alle
         s[suf] = nur_geschlossene(alle, mi, ende)
@@ -1011,6 +1395,7 @@ def serien_bauen(name, rolls, stand):
     s["1d"] = zu_tageskerzen(basis, stand, name)
     # inkl. laufendem Tag (fuer Wick/Tap und unbestaetigte Extreme)
     s["1d_alle"] = zu_tageskerzen(basis, datetime.max.replace(tzinfo=timezone.utc), name)
+    s["1w"], s["1w_alle"] = zu_wochenkerzen(basis, stand, name)
     return s
 
 
@@ -1030,13 +1415,13 @@ def pruefe_datei(pfad, symbole, b):
         teil = d.get(sym)
         if not isinstance(teil, dict) or "fehler" in teil:
             continue
-        s = serien_bauen(sym, d.get("rolls"), stand)
+        s = serien_bauen(sym, d.get("rolls"), stand, d.get("roll_modus", "roh"))
         if not s["30m"]:
             b.hinweis(sym, "-", "keine 30m-Rohdaten vorhanden, uebersprungen")
             continue
         alle_serien[sym] = s
         lv = Levels(sym, s["30m_alle"])
-        zonen = zonen_mit_zeit(teil)
+        reg = ZonenReg(s)
         pruefe_key_levels(b, sym, teil, s)
         pruefe_level_status(b, sym, teil, s)
         pruefe_fvg(b, sym, teil, s)
@@ -1046,18 +1431,18 @@ def pruefe_datei(pfad, symbole, b):
         pruefe_struktur(b, sym, teil, s)
         pruefe_devil_marks(b, sym, teil, s)
         pruefe_equal_levels(b, sym, teil, s)
-        pruefe_rejection_blocks(b, sym, teil, s)
-        pruefe_sponsorship(b, sym, teil)
+        pruefe_rejection_blocks(b, sym, teil, s, lv, reg)
+        pruefe_sponsorship(b, sym, teil, s, lv, reg)
         pruefe_nwog(b, sym, teil, s)
-        pruefe_manipulation(b, sym, teil, s, lv, zonen)
-        pruefe_stacked_po3(b, sym, teil, s, lv, zonen)
+        pruefe_manipulation(b, sym, teil, s, lv, reg)
+        pruefe_stacked_po3(b, sym, teil, s, lv, reg)
         pruefe_vwap(b, sym, teil, s)
         pruefe_market_condition(b, sym, teil, s)
         pruefe_data_levels(b, sym, teil, s)
     if "nq_vs_es" in d:
         pruefe_smt_tm(b, d)
     if "daily_profile" in d and "nq" in alle_serien:
-        pruefe_daily_profile(b, d, Levels("nq", alle_serien["nq"]["30m_alle"]), zonen_mit_zeit(d["nq"]), alle_serien["nq"])
+        pruefe_daily_profile(b, d, alle_serien["nq"])
     if "po3_heute" in d:
         pruefe_po3(b, d)
 
