@@ -344,3 +344,38 @@ def test_fehlende_1h_kerze_wird_aus_30m_gebaut_ohne_30m_daten_bleibt_die_luecke(
     assert [b["t"] for b in erg] == sorted(b["t"] for b in erg)
     ohne = A.fuelle_luecken([], grob, 60)
     assert ohne == grob
+
+
+# ------------------------------------------------------------ Befunde aus dem Zweit-Audit
+
+def test_kuerzen_schneidet_bei_wenigen_eintraegen_nicht_falsch_ab():
+    med = [{"unmediated": False, "_gefuellt": False, "ifvg": False, "id": i} for i in range(9)]
+    assert len(A.kuerze_fvgs(med)) == 9          # frueher: nur 1 (negativer Index)
+    ith = [{"status": "body_close", "n": i} for i in range(2)]
+    assert len(A.kuerze_ith(ith, 3)) == 2
+
+
+def test_ith_existiert_erst_ab_der_delivery_nicht_ab_der_bestaetigung():
+    # bearisches FVG 106-108; Preis laeuft hinein (Tap), bearische Bestaetigungskerze, dann Delivery unter deren Tief
+    basis = [(110, 112, 108, 109), (109, 109, 100, 101), (101, 106, 99, 100), (103, 107, 99, 100)]
+    bars = serie(utc("2026-09-28 12:00"), 60, basis + [(100, 100, 97, 98)])
+    r = A.intermediate_levels_alle(bars, "1h", 60)
+    assert len(r) == 1 and r[0]["art"] == "1h ITL" and r[0]["preis"] == 99.0
+    assert r[0]["_t_ab"] == bars[4]["t"] + timedelta(hours=1)          # Ende der Delivery-Kerze, nicht der Bestaetigung
+    # ohne Delivery gibt es (noch) keinen ITL
+    assert A.intermediate_levels_alle(bars[:4] + serie(utc("2026-09-28 16:00"), 60, [(100, 101, 99.5, 100)]), "1h", 60) == []
+
+
+def test_rejection_block_naechste_kerze_die_das_level_per_body_close_nimmt_bestaetigt_nicht():
+    bars = rb_bars([(100, 101, 99, 100), (101, 105, 100, 100.5), (100.5, 110, 100.5, 109), (109, 110, 108, 109)])
+    kl = A.KeyLevels("nq", FesteAchse({"pdh": 104.0}), [], [])
+    # Kerze 2 hat ein Doji-Body nach oben (c>o) => Bestaetigung nur ueber die Folgekerze, die aber ueber dem Level schliesst
+    bars[1] = kerze(bars[1]["t"], 100, 105, 99.5, 100.6)
+    bars[2] = kerze(bars[2]["t"], 110, 111, 100.5, 105)     # bearische Kerze, Close 105 > Level 104
+    assert A.rejection_blocks(bars, kl, A.Zonen([], [])) == []
+
+
+def test_fuelle_luecken_baut_keine_halbe_stunde():
+    fein = serie(utc("2026-09-28 10:00"), 30, [(100, 101, 99, 100.5)])
+    grob = [kerze(utc("2026-09-28 09:00"), 99, 100, 98, 99.5), kerze(utc("2026-09-28 11:00"), 102, 105, 101, 104)]
+    assert A.fuelle_luecken(fein, grob, 60) == grob

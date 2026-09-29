@@ -121,7 +121,7 @@ def fuelle_luecken(fein, grob, minuten_grob):
             slots.setdefault(start, []).append(b)
     neu = [{"t": st, "et": st.astimezone(ET), "o": g[0]["o"], "h": max(x["h"] for x in g),
             "l": min(x["l"] for x in g), "c": g[-1]["c"], "v": 0.0}
-           for st, g in sorted(slots.items())]
+           for st, g in sorted(slots.items()) if len(g) >= minuten_grob // 30]
     return sorted(grob + neu, key=lambda b: b["t"]) if neu else grob
 
 
@@ -574,6 +574,26 @@ def pruefe_key_levels(b, sym, d, s):
 
 
 
+def pruefe_session_levels(b, sym, d, s):
+    """Tag 7: Asia/London/NY-AM-High/Low = Extreme der Kerzen im Session-Fenster des Handelstags."""
+    if sym in SYMBOLE_OHNE_SESSIONS:
+        return
+    heute = [x for x in s["30m_alle"] if handelstag(x).isoformat() == d.get("handelstag")]
+    for pfx, w in Levels.SESS.items():
+        im = [x for x in heute if in_fenster(x, *w)]
+        for suffix, f in (("high", max), ("low", min)):
+            ist = (d.get("key_levels") or {}).get(f"{pfx}_{suffix}")
+            if not im:
+                if ist is not None:
+                    b.fehler(f"{sym} {pfx}_{suffix}", "Tag 7", f"{ist} gemeldet, aber keine Kerzen in der Session")
+                continue
+            soll = f(x["h"] if suffix == "high" else x["l"] for x in im)
+            if gleich(ist, soll):
+                b.ok(f"{sym} {pfx}_{suffix}", "Tag 7", f"{ist} nachgerechnet")
+            else:
+                b.fehler(f"{sym} {pfx}_{suffix}", "Tag 7", f"levels.json sagt {ist}, aus den Bars ergibt sich {round(soll, 2)}")
+
+
 def pruefe_level_status(b, sym, d, s):
     """Tag 3: Sweep = nur Wick, Bruch = Body Close (auf geschlossener Kerze).
     Session-Levels erst ab Ende ihrer Session. Geprueft auf 30m (status) und
@@ -681,6 +701,12 @@ def pruefe_ith_itl(b, sym, d, s):
             continue
         fenster = bars[tap:tap + 2]
         ist_itl = art.endswith("ITL")
+        # Tag 16: das Extrem zwischen FVG-Bildung und Tap ist das Level.
+        zw = bars[quelle:tap + 1]
+        soll_preis = min(x["l"] for x in zw) if ist_itl else max(x["h"] for x in zw)
+        if not gleich(e.get("preis"), soll_preis):
+            b.fehler(k, "Tag 16", f"Preis {e.get('preis')} ist nicht das {'Tief' if ist_itl else 'Hoch'} zwischen FVG und Tap ({round(soll_preis, 2)})")
+            continue
         if any((x["c"] > oben) if ist_itl else (x["c"] < unten) for x in fenster):
             b.fehler(k, "Tag 10", "FVG im Tap-Fenster mit Body Close derselben TF durchbrochen (IFVG)")
             continue
@@ -928,14 +954,14 @@ def pruefe_rejection_blocks(b, sym, d, s, lv, reg):
         if e.get("richtung") == "bearish":
             wick = gleich(x["h"], e.get("bis"))
             body = e.get("von") is None or abs(kopf - e["von"]) <= TOL
-            close = x["c"] < x["o"] or nxt["c"] < nxt["o"]
+            close = x["c"] < x["o"] or (nxt["c"] < nxt["o"] and lp is not None and nxt["c"] < lp)
             am_level = lp is not None and x["h"] >= lp - TOL and lp > kopf - TOL
             stark = (x["h"] - kopf) / spanne > RB_WICK_ANTEIL
             hoch = True
         else:
             wick = gleich(x["l"], e.get("von"))
             body = e.get("bis") is None or abs(fuss - e["bis"]) <= TOL
-            close = x["c"] > x["o"] or nxt["c"] > nxt["o"]
+            close = x["c"] > x["o"] or (nxt["c"] > nxt["o"] and lp is not None and nxt["c"] > lp)
             am_level = lp is not None and x["l"] <= lp + TOL and lp < fuss + TOL
             stark = (fuss - x["l"]) / spanne > RB_WICK_ANTEIL
             hoch = False
@@ -1456,6 +1482,7 @@ def pruefe_datei(pfad, symbole, b):
         lv = Levels(sym, s["30m_alle"])
         reg = ZonenReg(s)
         pruefe_key_levels(b, sym, teil, s)
+        pruefe_session_levels(b, sym, teil, s)
         pruefe_level_status(b, sym, teil, s)
         pruefe_fvg(b, sym, teil, s)
         pruefe_ith_itl(b, sym, teil, s)

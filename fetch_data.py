@@ -319,8 +319,8 @@ def main():
                 if suffix == "5m":
                     # Die letzten 3 Tage 5m werden committet (M5/R3): die
                     # Review braucht den Verlauf ab Bias-Zeitpunkt, auch fuer
-                    # XAU/BTC. Die vollen CSVs werden nicht committet
-                    # (.gitignore data/*.csv erfasst data/aktuell/ nicht).
+                    # XAU/BTC (zusaetzlich zu den vollen, ebenfalls
+                    # versionierten CSVs).
                     os.makedirs(os.path.join(OUT_DIR, "aktuell"), exist_ok=True)
                     kurz = rows[-3 * 288:]
                     with open(os.path.join(OUT_DIR, "aktuell", f"{key}.csv"), "w", encoding="utf-8") as fh:

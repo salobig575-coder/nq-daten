@@ -118,3 +118,15 @@ def test_falscher_rejection_block_wird_gefunden(stand):
         rb = d["nq"]["rejection_blocks_30m"][0]
         rb["level_preis"] += 500
     assert mutiert(stand, m)
+
+
+def test_falscher_ith_preis_wird_gefunden(stand):
+    def m(d):
+        d["nq"]["ith_itl"][-1]["preis"] += 137
+    assert any("ITH" in t or "ITL" in t for t in mutiert(stand, m))
+
+
+def test_falsches_session_level_wird_gefunden(stand):
+    def m(d):
+        d["nq"]["key_levels"]["london_high"] += 80
+    assert any("london_high" in t for t in mutiert(stand, m))

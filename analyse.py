@@ -96,7 +96,7 @@ OPERATIONALISIERUNGEN = {
     "swing_spanne": (
         "Ein Swing Point gilt als markant, wenn er das Extrem einer Formation "
         "aus 2 Bars links und rechts ist (bei der Fib-Range 3 Bars, weil eine "
-        "Range groebere Swings braucht als eine Liquiditaets-Reihe). Tag 3 "
+        "Range groebere Swings braucht als eine Liquiditaets-Reihe; auf Tages- und Wochenkerzen 2). Tag 3 "
         "sagt nur 'nur markante Swing Points, der Rest ist Noise' und nennt "
         "keine Zahl."
     ),
@@ -332,7 +332,7 @@ def lade(pfad, suffix=None, schluessel=None):
     return bars
 
 
-def fuelle_luecken(fein, grob, minuten_grob):
+def fuelle_luecken(fein, grob, minuten_grob, minuten_fein=30):
     """
     Fehlt bei Yahoo eine Kerze der groeberen Serie (z.B. die 1h-Kerze 23:00 ET),
     obwohl die feinere Serie (30m) fuer diese Zeit Kerzen hat, wird sie aus den
@@ -352,10 +352,12 @@ def fuelle_luecken(fein, grob, minuten_grob):
         return grob
     neu = []
     for start, g in sorted(slots.items()):
+        if len(g) < minuten_grob // minuten_fein:
+            continue   # nur vollstaendig belegte Stunden bauen
         neu.append({"t": start, "et": start.astimezone(ET), "o": g[0]["o"], "h": max(x["h"] for x in g),
                     "l": min(x["l"] for x in g), "c": g[-1]["c"], "v": sum(x.get("v", 0.0) for x in g),
                     "gefuellt": True})
-    return sorted(grob + neu, key=lambda b: b["t"])
+    return sorted(grob + neu, key=lambda b: b["t"]) if neu else grob
 
 
 def vielleicht_laden(name, suffix):
@@ -1322,7 +1324,7 @@ def kuerze_fvgs(alle, max_mediated=10, max_unmediated=None):
     if max_unmediated is not None:
         unmediated = unmediated[-max_unmediated:]
     mediated = [f for f in raus if not f["unmediated"]]
-    mediated = mediated[len(mediated) - max_mediated:] if max_mediated else []
+    mediated = mediated[-max_mediated:] if max_mediated else []
     behalten = set(id(f) for f in unmediated) | set(id(f) for f in mediated)
     # Kopien: ohne_intern() entfernt die Hilfsfelder aus der Anzeigeliste,
     # das Zonenregister soll sie behalten.
@@ -1359,7 +1361,7 @@ def kuerze_ith(alle, max_zu=3, seit_et=None):
     """
     offen = [r for r in alle if r["status"] != "body_close"]
     zu = [r for r in alle if r["status"] == "body_close"]
-    juengste = zu[len(zu) - max_zu:] if max_zu else []
+    juengste = zu[-max_zu:] if max_zu else []
     # Auch die in den letzten Tagen genommenen bleiben sichtbar: Rejection Blocks,
     # Manipulationen und Stacked PO3 der Woche beziehen sich auf sie und
     # muessen nachpruefbar sein.
@@ -1457,7 +1459,8 @@ def intermediate_levels_alle(bars, tf_name, minuten=None, live=()):
             bestaetigung = bars[b_idx]
             # --- 3. Delivery: der Preis laeuft danach wirklich weiter runter.
             weiter = bars[b_idx + 1 :]
-            if not weiter or min(b["l"] for b in weiter) >= bestaetigung["l"]:
+            lieferung = next((x for x in weiter if x["l"] < bestaetigung["l"]), None)
+            if lieferung is None:
                 continue
             bruch = status_mit_live(nach, live, level, "unter")
             art = "ITL"
@@ -1472,7 +1475,8 @@ def intermediate_levels_alle(bars, tf_name, minuten=None, live=()):
                 continue
             bestaetigung = bars[b_idx]
             weiter = bars[b_idx + 1 :]
-            if not weiter or max(b["h"] for b in weiter) <= bestaetigung["h"]:
+            lieferung = next((x for x in weiter if x["h"] > bestaetigung["h"]), None)
+            if lieferung is None:
                 continue
             bruch = status_mit_live(nach, live, level, "ueber")
             art = "ITH"
@@ -1495,8 +1499,10 @@ def intermediate_levels_alle(bars, tf_name, minuten=None, live=()):
             "extrem_in_tap_kerze": start is bars[tap],
             "et": start["et"].strftime(ZF),
             "status": bruch["status"],
-            # Ab wann existiert das Level? Nach dem Close der Bestaetigungskerze.
-            "_t_ab": bestaetigung["t"] + timedelta(minutes=minuten or 1440),
+            # Ab wann existiert das Level? Erst wenn die Delivery (Tag 16) da ist,
+            # also nach dem Close der ersten Kerze, die ueber die Bestaetigungs-
+            # kerze hinausgeht - vorher waere es noch kein ITH/ITL (kein Blick in die Zukunft).
+            "_t_ab": lieferung["t"] + timedelta(minutes=minuten or 1440),
         }
         if "zeit_et" in bruch:
             eintrag["bruch_zeit_et"] = bruch["zeit_et"]
@@ -1829,10 +1835,15 @@ def rejection_blocks(bars, kl, zonen, max_out=6):
         unterer_wick = koerper_tief - b["l"]
         spanne = max(b["h"] - b["l"], 1e-9)
 
-        oben_lv = next(((k, lv) for k, lv in werte if b["h"] >= lv > koerper_hoch), None)
-        unten_lv = next(((k, lv) for k, lv in werte if b["l"] <= lv < koerper_tief), None)
+        # Wick jenseits des Levels (Beruehrung genuegt nicht), Body diesseits.
+        oben_lv = next(((k, lv) for k, lv in werte if b["h"] > lv > koerper_hoch), None)
+        unten_lv = next(((k, lv) for k, lv in werte if b["l"] < lv < koerper_tief), None)
 
-        if oben_lv and oberer_wick / spanne > RB_WICK_ANTEIL and (b["c"] < b["o"] or nxt["c"] < nxt["o"]):
+        # Bestaetigung (Tag 12): Body Close in die Gegenrichtung - in der Kerze selbst
+        # oder der naechsten, die dann aber auch diesseits des Levels schliessen muss
+        # (sonst waere das Level per Body Close genommen, kein Rejection).
+        if oben_lv and oberer_wick / spanne > RB_WICK_ANTEIL and (
+                b["c"] < b["o"] or (nxt["c"] < nxt["o"] and nxt["c"] < oben_lv[1])):
             raus.append(
                 {
                     "richtung": "bearish",
@@ -1844,7 +1855,8 @@ def rejection_blocks(bars, kl, zonen, max_out=6):
                     "et": b["et"].strftime(ZF),
                 }
             )
-        if unten_lv and unterer_wick / spanne > RB_WICK_ANTEIL and (b["c"] > b["o"] or nxt["c"] > nxt["o"]):
+        if unten_lv and unterer_wick / spanne > RB_WICK_ANTEIL and (
+                b["c"] > b["o"] or (nxt["c"] > nxt["o"] and nxt["c"] > unten_lv[1])):
             raus.append(
                 {
                     "richtung": "bullish",
@@ -2590,7 +2602,9 @@ def auswerten(name, stand_utc=None):
         "ndog": ndog,
         "vwap": vwap_tag(bars),
         "market_condition": market_condition(bars_z),
-        "data_levels": ohne_intern([dict(x) for x in data_alle[-6:]]),
+        "data_levels": ohne_intern([dict(x) for x in data_alle
+                                    if x["zeit_et"] >= (bars[-1]["et"] - timedelta(days=7)).strftime(ZF)] or
+                                   [dict(x) for x in data_alle[-6:]]),
         "manipulations_leg": manip,
     }
     if profil is not None:

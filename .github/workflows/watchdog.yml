@@ -16,6 +16,7 @@ permissions:
 jobs:
   frische-check:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Repo auschecken
         uses: actions/checkout@v4
@@ -210,6 +211,7 @@ jobs:
             # rebase + Wiederholung, wie in fetch.yml.
             for versuch in 1 2 3 4; do
               git pull --rebase origin main && git push && exit 0
+              git rebase --abort 2>/dev/null || true
               echo "Push-Versuch $versuch fehlgeschlagen, neuer Versuch ..."
               sleep $((versuch * 5))
             done

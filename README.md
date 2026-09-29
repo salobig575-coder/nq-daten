@@ -20,7 +20,7 @@ Google Apps Script (Fenster) + GitHub-Cron (:07/:37)
         │
         ▼
  Commit nach main ──►  Routinen (Daily Bias, Früh-Übersicht, Review) lesen den Commit
- watchdog.yml    prüft stündlich die Frische, öffnet/schließt Issues, schreibt data/watchdog_status.json
+ watchdog.yml    prüft die Frische (zwei Cron-Einträge pro Stunde), öffnet/schließt Issues, schreibt data/watchdog_status.json
 ```
 
 | Datei | Zweck |
@@ -59,7 +59,7 @@ pip install pytest
 python fetch_data.py         # nur mit Netz zu Yahoo
 python analyse.py            # schreibt data/levels.json, levels_extra.json, rolls.json
 python pruefe.py             # schreibt data/pruefung.json, Exit 1 bei FEHLER
-python -m pytest tests -q    # ca. 1 Minute
+python -m pytest tests -q    # ca. 15 Sekunden
 python tools/regress.py pruefen                   # pruefe.py auf 20 historischen Datenständen
 python tools/regress.py speichern vorher          # Baseline vor einer Änderung an analyse.py
 python tools/regress.py vergleichen vorher        # nach der Änderung: alle Abweichungen einzeln durchgehen
@@ -70,7 +70,18 @@ python bewerte.py nq 2026-09-28 08:45 bullish --dol 30900 --level 30800   # Revi
 
 1. Wo das Bootcamp eine Zahl offenlässt, steht die Festlegung im Register `OPERATIONALISIERUNGEN` – nie stillschweigend im Code.
 2. Änderungen an `analyse.py` nur mit Baseline-Vergleich (`tools/regress.py`); absichtliche Abweichungen einzeln benennen.
-3. `pruefe.py` bleibt unabhängig von `analyse.py` (kein Import). Neue Definitionen dort *neu* schreiben, nicht kopieren, und einen Mutationstest
-   in `tests/test_pruefe.py` ergänzen.
+3. `pruefe.py` importiert nichts aus `analyse.py` und rechnet Zonenregister, Key-Level-Zeitachse, Manipulation, Profil, Stacked PO3, RB und Sponsorship
+   selbst nach. Bewusst identisch gehalten sind nur Definitionen von Zeitbasis und Datenlücken (`ist_luecke`, Handelstag, Auffüllen von 1h-Lücken, 5m-genaue
+   erste Berührung) – dort erkennt die Prüfung keine gemeinsamen Denkfehler. Nicht nachgerechnet werden u.a. Roll-Erkennung, `richtung` der Trends und die
+   Vollständigkeit von Data-/EQ-/ITH-Sweeps (nur gemeldete werden belegt). Neue Definitionen dort *neu* schreiben und einen Mutationstest in
+   `tests/test_pruefe.py` ergänzen.
 4. Skills (`prayn-bootcamp-konzepte`, `daily-bias-nq`) und Routine-Prompts liegen im Claude-Konto, nicht hier. Änderungen an Definitionen
    müssen dort nachgezogen werden – sonst widersprechen sich Skill und Code (siehe `docs/skill-aenderungen.md`).
+
+## Bekannte Grenzen
+
+* Testreplays (`tests/snapshot.py`, `tools/regress.py`) behalten die zum Zeitpunkt T noch laufende Kerze mit ihrem fertigen OHLC; Wick/Tap der laufenden
+  Kerze sind im Replay daher etwas "informierter" als live. Für Definitionsänderungen ist das unkritisch, für Live-Verhalten nicht.
+* Key Levels aus Sessions früherer Handelstage (z.B. das London-High von gestern) zählen nicht; nur die Sessions des eigenen Handelstags (offene Entscheidung).
+* Range/OTE: Die Extrem-Kerze selbst zählt für "bis Equilibrium rebalanced" mit (die Reihenfolge Hoch/Tief innerhalb einer Kerze ist unbekannt, konservativ).
+* Yahoo liefert die 5m-Kerze 00:00 ET täglich nicht; Body Closes in dieser Kerze fallen erst über den 30m-Close auf.
