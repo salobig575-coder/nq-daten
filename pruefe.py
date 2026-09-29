@@ -542,7 +542,9 @@ def pruefe_trend(b, sym, d, s):
             if not gleich(traeger, soll_tr):
                 b.fehler(k, "Tag 3", "tragender Swing ist nicht das letzte Swing Low/High")
                 continue
-            idx = max((i for i, x in enumerate(bars) if gleich(x["l"] if r == "bullish" else x["h"], traeger)), default=None)
+            sw_h, sw_t = swingpunkte(bars, 2)
+            idx = max((i for i in (sw_t if r == "bullish" else sw_h)
+                       if gleich(bars[i]["l"] if r == "bullish" else bars[i]["h"], traeger)), default=None)
             if idx is not None:
                 soll = status(bars[idx + 1:], [], traeger, r == "bearish")
                 if soll != t.get("these_status"):
@@ -552,9 +554,18 @@ def pruefe_trend(b, sym, d, s):
                     b.fehler(k, "Tag 3", "Body Close jenseits des tragenden Swings ist ein MSS, das Feld mss sagt aber nicht True")
                     continue
         ok = True
+        # Die CISD-Kerze ist die Kerze des letzten BESTAETIGTEN Swings (Tag 4:
+        # "die Candle, die das letzte signifikante High/Low geformt hat"). Bei
+        # gleichen Extremen (Doppelhoch/-tief) gibt es mehrere Kerzen mit
+        # demselben Preis - massgeblich ist die letzte davon, die ein Swing ist.
+        # Frueher wurde hier die letzte Kerze mit gleichem Preis genommen, auch
+        # wenn sie noch kein bestaetigter Swing war: falscher FEHLER an 10 von
+        # 30 Datenstaenden vom 28.-29.09.2026.
+        sw_hoch, sw_tief = swingpunkte(bars, 2)
         for schl, swing_feld, nach_oben in (("cisd_bullish", "letztes_swing_high", True), ("cisd_bearish", "letztes_swing_low", False)):
             wert, swing = t.get(schl), t.get(swing_feld)
-            idx = max((i for i, x in enumerate(bars) if gleich(x["h"] if nach_oben else x["l"], swing)), default=None)
+            kandidaten = sw_hoch if nach_oben else sw_tief
+            idx = max((i for i in kandidaten if gleich(bars[i]["h"] if nach_oben else bars[i]["l"], swing)), default=None)
             if wert is None or idx is None:
                 continue
             q = bars[idx]
