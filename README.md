@@ -88,3 +88,7 @@ python bewerte.py nq 2026-09-28 08:45 bullish --dol 30900 --level 30800   # Revi
 * Key Levels aus Sessions früherer Handelstage (z.B. das London-High von gestern) zählen nicht; nur die Sessions des eigenen Handelstags (offene Entscheidung).
 * Range/OTE: Die Extrem-Kerze selbst zählt für "bis Equilibrium rebalanced" mit (die Reihenfolge Hoch/Tief innerhalb einer Kerze ist unbekannt, konservativ).
 * Yahoo liefert die 5m-Kerze 00:00 ET täglich nicht; Body Closes in dieser Kerze fallen erst über den 30m-Close auf.
+
+
+## Lernsystem
+Messen, Deuten und Ändern sind getrennt: `bewerte.py` (objektives Urteil), `biascheck.py`/`levelcheck.py` (Vorab-Checks), `lernen.py` (Statistik, Evidenz-Gate, Regelbilanz, Baselines), `regeltest.py` (Rückwärtstest). Beschreibung, Schutzmechanismen und Grenzen: `docs/lernsystem.md`. Wochenroutine: `docs/routinen/neu/meta-report_NEU.txt`.

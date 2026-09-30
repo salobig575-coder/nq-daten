@@ -198,6 +198,19 @@ OPERATIONALISIERUNGEN = {
         "Timeframe, sagt aber, SMTs treten auf 5m am haeufigsten auf "
         "(Festlegung mit Salzmir, 23.09.2026)."
     ),
+    "lernsystem_urteil": (
+        "Das Review-Urteil (TREFFER/TEILTREFFER/DANEBEN) kommt aus bewerte.urteil() nach festen Schwellen: "
+        "TREFFER = DOL per Wick erreicht und Gegenbewegung davor <= 1,0 x DOL-Strecke; TEILTREFFER = DOL erreicht mit "
+        "groesserer Gegenbewegung oder >= 50 % der Strecke gelaufen bei MFE > MAE; sonst DANEBEN. Das Bootcamp definiert "
+        "kein Bewertungsschema fuer den eigenen Bias (Systemfestlegung, 30.09.2026)."
+    ),
+    "lernsystem_gate": (
+        "Eine Regel darf erst entstehen, wenn lernen.gate() besteht: >= 3 verschiedene Tage ueber >= 3 Tage verteilt, "
+        "Fehlerrate je Gelegenheit >= 25 % (untere Wilson-Grenze >= 10 %, >= 5 Gelegenheiten), regelfaehige Fehlerart "
+        "und Ursache nicht zufall/extern/daten; zaehlbare Risikofaktoren zusaetzlich regeltest.backtest() 'belegt'. "
+        "Danach der Skill-Abgleich mit prayn-bootcamp-konzepte. Alle Schwellen stehen in lernen.SCHWELLEN und "
+        "regeltest.SCHWELLEN (Systemfestlegung, 30.09.2026, keine Bootcamp-Aussage)."
+    ),
     "ifvg_knapp": (
         f"Jeder Body Close jenseits des ganzen Gaps macht ein IFVG. Liegt der Close "
         f"weniger als {IFVG_KNAPP_ANTEIL:.0%} der Gap-Breite jenseits, steht "
