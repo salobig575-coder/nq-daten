@@ -13,3 +13,6 @@ Die drei Claude-Routinen (Trigger) liegen im Claude-Konto; dieser Ordner hält i
 
 **Stand:** Die Prompts aus `neu/` sind seit 29.09.2026 live (Review-Prompt mit automatischer Regelaktivierung seit 30.09.2026). `neu/` entspricht dem Live-Text.
 Umschalten: Prompt-Text aus `neu/` per `update_trigger` (bzw. in den Routine-Einstellungen) einsetzen. Zurück: Text aus `alt/`.
+
+## Wochenroutine (Meta-Report)
+`neu/meta-report_NEU.txt` ist als Routine `trig_0123794TzdVNibNvSaWZ4bt8` angelegt (Sonntag 19:47 Wien), aber DEAKTIVIERT: Routinen, die über das API angelegt werden, erhalten keine Connectoren. Vor dem Einschalten in den Routine-Einstellungen Notion und Gmail hinzufügen (wie bei den anderen drei Routinen), dann aktivieren.
