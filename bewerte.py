@@ -31,6 +31,12 @@ import sys
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
+# Schwellen des objektiven Urteils (Systemfestlegung, NICHT aus dem Bootcamp; Register analyse.OPERATIONALISIERUNGEN).
+URTEIL_SCHWELLEN = {
+    "teiltreffer_fortschritt": 0.5,     # Anteil der Strecke Preis->DOL, der in Bias-Richtung gelaufen sein muss
+    "treffer_max_gegenbewegung": 1.0,   # DOL erreicht, aber vorher mehr als die ganze DOL-Strecke dagegen = nur TEILTREFFER
+}
+
 ET = ZoneInfo("America/New_York")
 UTC = timezone.utc
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -62,6 +68,57 @@ def handelstag_ende(datum, symbol):
     if symbol == "btc":
         return datetime(datum.year, datum.month, datum.day, tzinfo=UTC) + timedelta(days=1)
     return datetime(datum.year, datum.month, datum.day, 17, tzinfo=ET).astimezone(UTC)
+
+
+def _gegenbewegung(fenster, wick, preis, richtung):
+    """Groesste Bewegung gegen die Bias-Richtung VOR der Kerze, die das DOL beruehrt (bis zum Fensterende, wenn nie beruehrt)."""
+    if richtung not in ("bullish", "bearish"):
+        return None
+    davor = [b for b in fenster if wick is None or b["t"] < wick["t"]]
+    if not davor:
+        return 0.0
+    if richtung == "bullish":
+        return round(max(0.0, preis - min(b["l"] for b in davor)), 2)
+    return round(max(0.0, max(b["h"] for b in davor) - preis), 2)
+
+
+def urteil(erg):
+    """
+    Deterministisches Ergebnis-Urteil aus den Kennzahlen von bewerte(). Ersetzt das freie Modellurteil: gleicher
+    Massstab an jedem Tag, damit Quoten ueber Wochen vergleichbar bleiben. Das Review darf abweichen, muss es dann
+    aber im Log mit Grund festhalten ("Urteil-Abweichung").
+      TREFFER      DOL erreicht (Wick), Gegenbewegung davor <= 1,0 x DOL-Strecke
+      TEILTREFFER  DOL erreicht mit groesserer Gegenbewegung, oder nicht erreicht aber >= 50 % der Strecke in Bias-Richtung
+                   gelaufen und MFE > MAE
+      DANEBEN      sonst
+      KEIN BIAS    Richtung neutral
+      None         nicht entscheidbar (kein DOL, Richtung passt nicht zum DOL, keine Kerzen) - Review entscheidet und begruendet
+    """
+    sw = URTEIL_SCHWELLEN
+    if "fehler" in erg:
+        return {"wort": None, "grund": erg["fehler"], "vorlaeufig": False}
+    if erg.get("richtung") == "neutral":
+        return {"wort": "KEIN BIAS", "grund": "Richtung neutral", "vorlaeufig": False}
+    dol = erg.get("dol")
+    if not dol:
+        return {"wort": None, "grund": "kein DOL uebergeben", "vorlaeufig": bool(erg.get("unvollstaendig"))}
+    if dol["bias_richtung_passt_zum_dol"] is False:
+        return {"wort": None, "grund": "Bias-Richtung passt nicht zur Lage des DOL", "vorlaeufig": False}
+    strecke = dol["abstand_punkte"]
+    gegen = dol["gegenbewegung_bis_dol"]
+    mfe, mae = erg["mfe_punkte"], erg["mae_punkte"]
+    vorl = bool(erg.get("unvollstaendig")) and not dol["erreicht"]
+    if dol["erreicht"]:
+        if strecke > 0 and gegen > sw["treffer_max_gegenbewegung"] * strecke:
+            return {"wort": "TEILTREFFER", "vorlaeufig": False,
+                    "grund": f"DOL erreicht, aber {gegen} Pkt Gegenbewegung davor (> {sw['treffer_max_gegenbewegung']} x Strecke {strecke})"}
+        return {"wort": "TREFFER", "vorlaeufig": False, "grund": f"DOL erreicht {dol['erreicht_et']} ET, Gegenbewegung davor {gegen} Pkt bei Strecke {strecke}"}
+    fortschritt = mfe / strecke if strecke else 0.0
+    if fortschritt >= sw["teiltreffer_fortschritt"] and mfe > mae:
+        return {"wort": "TEILTREFFER", "vorlaeufig": vorl,
+                "grund": f"DOL nicht erreicht, aber {round(fortschritt * 100)} % der Strecke gelaufen (MFE {mfe} > MAE {mae})"}
+    return {"wort": "DANEBEN", "vorlaeufig": vorl,
+            "grund": f"DOL nicht erreicht, nur {round(fortschritt * 100)} % der Strecke in Bias-Richtung (MFE {mfe}, MAE {mae})"}
 
 
 def bewerte(bars, start, ende, richtung, dol=None, levels=(), rolls=()):
@@ -111,6 +168,8 @@ def bewerte(bars, start, ende, richtung, dol=None, levels=(), rolls=()):
             "body_close_jenseits": close is not None,
             "body_close_et": et_text(close["t"]) if close else None,
             "naechster_punkt": None if wick else round(min(abs(dol - hi["h"]), abs(dol - lo["l"])), 2),
+            "minuten_bis_dol": None if not wick else int((wick["t"] - fenster[0]["t"]).total_seconds() // 60),
+            "gegenbewegung_bis_dol": _gegenbewegung(fenster, wick, preis, richtung),
             "bias_richtung_passt_zum_dol": (richtung == "bullish") == oben if richtung in ("bullish", "bearish") else None,
         }
     beruehrt = []
@@ -122,6 +181,7 @@ def bewerte(bars, start, ende, richtung, dol=None, levels=(), rolls=()):
         erg["levels"] = beruehrt
         reihenfolge = sorted((x for x in beruehrt if x["beruehrt"]), key=lambda x: x["et"])
         erg["erstes_level"] = reihenfolge[0]["level"] if reihenfolge else None
+    erg["urteil"] = urteil(erg)
     for r in rolls:
         t = datetime.strptime(r["zeit_utc"], ZF).replace(tzinfo=UTC)
         if start <= t < ende:

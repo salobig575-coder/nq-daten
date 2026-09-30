@@ -6,7 +6,12 @@ vergeben hat: "Falsche TF-Angabe", "Wortwahl/Stil", falsche oder erfundene Zahle
 Versand selbst findet und die Review sie am versendeten Text nachpruefen kann.
 
   python3 biascheck.py ENTWURF.txt data/levels.json nq [--alter-min 12]
+      [--richtung bullish|bearish --dol PREIS [--zone PREIS]]     (zusaetzlich Konsistenz-Check)
   (XAU/BTC: data/levels_extra.json xau|btc)
+
+Konsistenz-Check (nur mit --richtung und --dol): DOL auf der falschen Seite, Bias gegen die Mehrheit der HTF-Signale
+ohne benannten Gegenkontext, Levels zwischen Preis und DOL, die im Text nicht vorkommen. Er liefert ausserdem die
+"Ausrichtung" (Anteil der Signale, die zur Bias-Richtung passen) - eine Messzahl fuer das Log, kein Urteil.
 
 Ausgabe: eine Zeile je Warnung ("WARNUNG <Art>: ..."), Exit-Code 1 bei mindestens einer Warnung.
 Warnungen sind Hinweise zum Pruefen: eine abgeleitete Zahl (z.B. Mitte einer Zone) darf
@@ -86,12 +91,71 @@ def pruefe(text, block, alter_min=None):
     return warn
 
 
+SIGNAL_TF = ("trend_1w", "trend_1d", "trend_4h", "trend_1h")
+GEGENKONTEXT = ("gegen", "counter", "retracement", "pullback", "rebalance", "korrektur", "ruecksetzer", "rücksetzer", "premium", "discount", "trotz", "obwohl")
+
+
+def signale(block):
+    """HTF-Signale als {name: +1 bullish | -1 bearish}; 'range' und fehlende Werte zaehlen nicht."""
+    raus = {}
+    for k in SIGNAL_TF:
+        r = (block.get(k) or {}).get("richtung")
+        if r in ("bullish", "bearish"):
+            raus[k] = 1 if r == "bullish" else -1
+    for k in ("range_ote_1d", "range_ote_4h"):
+        pi = (block.get(k) or {}).get("preis_in")
+        if pi in ("premium", "discount"):
+            raus[f"{k} ({pi})"] = -1 if pi == "premium" else 1
+    return raus
+
+
+def konsistenz(block, richtung, dol, zone=None, text=""):
+    """Widerspruchs-Check VOR dem Versand. Rueckgabe: (Warnungen, Info-Dict mit ausrichtung/signale/pfad_levels/hinweise)."""
+    import levelcheck
+    warn, hinweise = [], []
+    preis = block.get("preis")
+    vorz = 1 if richtung == "bullish" else -1
+    if preis is not None and dol is not None and (dol > preis) != (richtung == "bullish"):
+        warn.append(("Interpretation", f"DOL {dol} liegt auf der falschen Seite fuer einen {richtung} Bias (Preis {preis})"))
+    sig = signale(block)
+    passend = [k for k, v in sig.items() if v == vorz]
+    ausrichtung = round(len(passend) / len(sig), 2) if sig else None
+    if ausrichtung is not None and ausrichtung < 0.5 and not any(w in text.lower() for w in GEGENKONTEXT):
+        dagegen = ", ".join(f"{k} {'bullish' if v == 1 else 'bearish'}" for k, v in sig.items() if v != vorz)
+        warn.append(("Interpretation", f"{richtung} Bias steht gegen die Mehrheit der Signale ({dagegen}); der Text benennt keinen Gegenkontext (Retracement/Pullback/Premium-Discount) - Gewichtung begruenden"))
+    pfad = []
+    if preis is not None and dol is not None:
+        cands = levelcheck.kandidaten(block)
+        pfad = levelcheck.zwischen(cands, preis, dol)
+        if zone is not None:
+            pfad += [c for c in levelcheck.zwischen(cands, preis, zone) if c not in pfad]
+        for c in pfad:
+            c["abstand"] = levelcheck.abstand(c, preis)
+        pfad.sort(key=lambda c: c["abstand"])
+        gesehen, fehlt = set(), []
+        for c in pfad:
+            key = round(c["von"], 1)
+            if key in gesehen:
+                continue
+            gesehen.add(key)
+            zahl = str(int(c["von"]))
+            if zahl not in text.replace(".", "").replace(",", "") and zahl not in text:
+                fehlt.append(f"{c['name']} {c['von']} ({c['abstand']} Pkt)")
+        if fehlt:
+            hinweise.append("Zwischen Preis und Ziel, im Text nicht genannt (bewusst weggelassen?): " + "; ".join(fehlt[:6])
+                            + (f"; +{len(fehlt) - 6} weitere" if len(fehlt) > 6 else ""))
+    return warn, {"ausrichtung": ausrichtung, "signale": sig, "pfad_levels": len(pfad), "hinweise": hinweise}
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("entwurf")
     ap.add_argument("levels")
     ap.add_argument("symbol")
     ap.add_argument("--alter-min", type=float)
+    ap.add_argument("--richtung", choices=("bullish", "bearish"))
+    ap.add_argument("--dol", type=float)
+    ap.add_argument("--zone", type=float)
     a = ap.parse_args(argv)
     text = open(a.entwurf, encoding="utf-8").read()
     with open(a.levels, encoding="utf-8") as fh:
@@ -103,6 +167,13 @@ def main(argv=None):
             if extra in d:
                 ohne_register[extra] = d[extra]
     warn = pruefe(text, ohne_register, a.alter_min)
+    if a.richtung and a.dol is not None:
+        kw, info = konsistenz(block, a.richtung, a.dol, a.zone, text)
+        warn += kw
+        for h in info["hinweise"]:
+            print(f"HINWEIS Level: {h}")
+        print(f"AUSRICHTUNG {info['ausrichtung']} ({len(info['signale'])} Signale: "
+              + ", ".join(f"{k}={'+' if v > 0 else '-'}" for k, v in info['signale'].items()) + f"; {info['pfad_levels']} Levels zwischen Preis und Ziel)")
     for art, w in warn:
         print(f"WARNUNG {art}: {w}")
     if not warn:

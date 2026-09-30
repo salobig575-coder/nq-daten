@@ -11,5 +11,5 @@ Die drei Claude-Routinen (Trigger) liegen im Claude-Konto; dieser Ordner hält i
 * `alt/` – Stand vor der Umstellung (29.09.2026).
 * `neu/` – Stand passend zum Code dieses Branches (Session-Manipulation, einheitliche Key-Level-Definition, Weekly, roher Chart, `bewerte.py`, Regel-Freigabe).
 
-**Umschalten erst NACH dem Merge nach `main`.** Die neuen Prompts beschreiben Felder (`manipulations_leg.sessions`, `fvg_1w`, `level_preis`, …), die `levels.json` erst nach dem nächsten Lauf mit dem neuen Code enthält, und verweisen auf `bewerte.py`. Vorher würden sie gegen die alte Datenstruktur laufen.
+**Stand:** Die Prompts aus `neu/` sind seit 29.09.2026 live (Review-Prompt mit automatischer Regelaktivierung seit 30.09.2026). `neu/` entspricht dem Live-Text.
 Umschalten: Prompt-Text aus `neu/` per `update_trigger` (bzw. in den Routine-Einstellungen) einsetzen. Zurück: Text aus `alt/`.
