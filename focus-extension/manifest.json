@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "Fokus – Social Media entschärfen",
+  "version": "1.0.0",
+  "description": "Blendet Feeds, Empfehlungen, Shorts, Kommentare & Co. auf YouTube, Twitch, TikTok, Instagram, X, Facebook, Reddit u.v.m. aus. Mit Zeitlimit.",
+  "permissions": ["storage"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Fokus",
+    "default_icon": { "16": "icons/16.png", "48": "icons/48.png", "128": "icons/128.png" }
+  },
+  "icons": { "16": "icons/16.png", "48": "icons/48.png", "128": "icons/128.png" },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.youtube.com/*",
+        "*://*.twitch.tv/*",
+        "*://*.tiktok.com/*",
+        "*://*.instagram.com/*",
+        "*://*.facebook.com/*",
+        "*://*.x.com/*",
+        "*://*.twitter.com/*",
+        "*://*.reddit.com/*",
+        "*://*.linkedin.com/*",
+        "*://*.pinterest.com/*",
+        "*://*.threads.net/*",
+        "*://*.threads.com/*"
+      ],
+      "js": ["sites.js", "content.js"],
+      "run_at": "document_start"
+    }
+  ]
+}
