@@ -1,6 +1,6 @@
 {
- "berechnet_utc": "2026-10-16 03:38:20",
- "datenstand_utc": "2026-10-16 03:37:39",
+ "berechnet_utc": "2026-10-16 04:04:20",
+ "datenstand_utc": "2026-10-16 04:03:39",
  "hinweis": "XAU (Gold-Future GC=F von Yahoo, NICHT Spot-XAUUSD - Preise liegen um den Terminaufschlag ueber Spot) und BTCUSD fuer die taegliche Frueh-Uebersicht. Fuer beide KEIN SMT und keine True Manipulation (kein korrelierendes Pair) und KEINE Asia-/London-/NY-AM-Sessions. 1h/4h/1d aus 730 Tagen 1h-Historie. Gold: CME-Handelstag 18:00 ET bis 17:00 ET. BTC: Tageskerze 00:00 UTC bis 00:00 UTC wie in ueblichen BTC-Charts, Samstag und Sonntag sind eigene Tage.",
  "operationalisierungen": {
   "swing_spanne": "Ein Swing Point gilt als markant, wenn er das Extrem einer Formation aus 2 Bars links und rechts ist (bei der Fib-Range 3 Bars, weil eine Range groebere Swings braucht als eine Liquiditaets-Reihe; auf Tages- und Wochenkerzen 2). Tag 3 sagt nur 'nur markante Swing Points, der Rest ist Noise' und nennt keine Zahl.",
@@ -39,7 +39,7 @@
  "xau": {
   "preis": 4190.4,
   "letzte_bar_et": "2026-10-15 23:00",
-  "datenende_utc": "2026-10-16 03:27",
+  "datenende_utc": "2026-10-16 03:30",
   "handelstag": "2026-10-16",
   "handelstag_hat_kerzen": true,
   "markt_geschlossen": null,
@@ -208,7 +208,7 @@
     "close": 4216.3
    }
   },
-  "laufende_kerze_ausgeschlossen": true,
+  "laufende_kerze_ausgeschlossen": false,
   "trend_1w": {
    "richtung": "bearish",
    "letztes_swing_high": 4755.0,
@@ -434,6 +434,12 @@
    "extrem_et": "2026-10-15 22:30",
    "extrem_unbestaetigt": true,
    "uebersprungene_ranges": [
+    {
+     "von": 4167.5,
+     "bis": 4197.7,
+     "equilibrium": 4182.6,
+     "grund": "bis Equilibrium rebalanced -> verbraucht (Tag 11)"
+    },
     {
      "von": 4164.5,
      "bis": 4201.3,
@@ -1733,16 +1739,6 @@
   "fvg_30m": [
    {
     "richtung": "bearish",
-    "von": 4580.9,
-    "bis": 4603.5,
-    "mitte": 4592.2,
-    "et": "2026-08-28 12:00",
-    "unmediated": true,
-    "erster_tap_et": null,
-    "ifvg": false
-   },
-   {
-    "richtung": "bearish",
     "von": 4379.4,
     "bis": 4380.5,
     "mitte": 4379.95,
@@ -1977,6 +1973,16 @@
     "bis": 4181.4,
     "mitte": 4178.6,
     "et": "2026-10-15 22:30",
+    "unmediated": true,
+    "erster_tap_et": null,
+    "ifvg": false
+   },
+   {
+    "richtung": "bullish",
+    "von": 4183.0,
+    "bis": 4190.0,
+    "mitte": 4186.5,
+    "et": "2026-10-15 23:00",
     "unmediated": true,
     "erster_tap_et": null,
     "ifvg": false
@@ -2555,6 +2561,19 @@
     "gesponsort": false,
     "sponsor": null,
     "leg_start_et": "2026-10-15 21:30"
+   },
+   {
+    "richtung": "bearish",
+    "von": 4192.7,
+    "bis": 4193.3,
+    "mitte": 4193.0,
+    "et": "2026-10-15 23:25",
+    "unmediated": true,
+    "erster_tap_et": null,
+    "ifvg": false,
+    "gesponsort": true,
+    "sponsor": "Sweep pdh (4197.7)",
+    "leg_start_et": "2026-10-15 22:55"
    }
   ],
   "ith_itl": [
@@ -3884,7 +3903,7 @@
   ],
   "vwap": 4182.21,
   "market_condition": {
-   "fvgs_letzte_60_bars": 14,
+   "fvgs_letzte_60_bars": 15,
    "bewertung": "gut"
   },
   "data_levels": [
@@ -4056,9 +4075,9 @@
   }
  },
  "btc": {
-  "preis": 81695.48,
-  "letzte_bar_et": "2026-10-15 23:30",
-  "datenende_utc": "2026-10-16 03:37",
+  "preis": 81937.16,
+  "letzte_bar_et": "2026-10-16 00:00",
+  "datenende_utc": "2026-10-16 04:03",
   "handelstag": "2026-10-16",
   "handelstag_hat_kerzen": true,
   "markt_geschlossen": null,
@@ -4115,12 +4134,12 @@
   "pw_woche_ab": "2026-10-05",
   "heute_bisher": {
    "high": 82426.54,
-   "low": 81689.73,
+   "low": 81591.31,
    "open": 82126.35,
-   "close": 81695.48
+   "close": 81937.16
   },
   "heute_high_zeit_et": "2026-10-15 21:15",
-  "heute_low_zeit_et": "2026-10-15 23:35",
+  "heute_low_zeit_et": "2026-10-15 23:40",
   "po3_form": "OHLC (bearische Manipulation zuerst nach oben)",
   "stacked_po3": null,
   "tage": {
@@ -4250,11 +4269,11 @@
   },
   "trend_4h": {
    "richtung": "bearish",
-   "letztes_swing_high": 84054.9,
+   "letztes_swing_high": 82543.73,
    "letztes_swing_low": 79689.49,
-   "traegt_these": 84054.9,
+   "traegt_these": 82543.73,
    "these_status": "unberuehrt",
-   "cisd_bullish": 83481.14,
+   "cisd_bullish": 82333.56,
    "cisd_bearish": 80884.52,
    "cisd_bullish_status": "sweep",
    "cisd_bearish_status": "unberuehrt",
@@ -4262,13 +4281,13 @@
   },
   "trend_1h": {
    "richtung": "range",
-   "letztes_swing_high": 82500.0,
+   "letztes_swing_high": 82426.54,
    "letztes_swing_low": 81854.04,
-   "traegt_these": 82500.0,
+   "traegt_these": 82426.54,
    "these_status": "unberuehrt",
-   "cisd_bullish": 82369.97,
+   "cisd_bullish": 82227.04,
    "cisd_bearish": 82015.62,
-   "cisd_bullish_status": "sweep",
+   "cisd_bullish_status": "unberuehrt",
    "cisd_bearish_status": "body_close",
    "mss": false
   },
@@ -4435,43 +4454,74 @@
    }
   ],
   "range_ote": {
-   "leg": "bearish",
-   "von": 81689.73,
-   "bis": 82500.0,
-   "spanne": 810.27,
-   "equilibrium": 82094.86,
-   "ote_von": 82192.1,
-   "ote_bis": 82329.84,
-   "golden_pocket": 82260.97,
-   "preis_bei_prozent": 0.7,
-   "preis_in": "discount",
-   "start_et": "2026-10-15 18:00",
-   "extrem_et": "2026-10-15 23:30",
-   "extrem_unbestaetigt": true,
+   "leg": "bullish",
+   "von": 79689.49,
+   "bis": 82543.73,
+   "spanne": 2854.24,
+   "equilibrium": 81116.61,
+   "ote_von": 80288.88,
+   "ote_bis": 80774.1,
+   "golden_pocket": 80531.49,
+   "preis_bei_prozent": 78.7,
+   "preis_in": "premium",
+   "start_et": "2026-10-15 09:30",
+   "extrem_et": "2026-10-15 13:00",
+   "extrem_unbestaetigt": false,
    "uebersprungene_ranges": [
     {
      "von": 82042.0,
      "bis": 82426.54,
      "equilibrium": 82234.27,
      "grund": "bis Equilibrium rebalanced -> verbraucht (Tag 11)"
+    },
+    {
+     "von": 81591.31,
+     "bis": 82500.0,
+     "equilibrium": 82045.65,
+     "grund": "bis Equilibrium rebalanced -> verbraucht (Tag 11)"
+    },
+    {
+     "von": 81854.04,
+     "bis": 82500.0,
+     "equilibrium": 82177.02,
+     "grund": "bis Equilibrium rebalanced -> verbraucht (Tag 11)"
+    },
+    {
+     "von": 81591.31,
+     "bis": 82502.99,
+     "equilibrium": 82047.15,
+     "grund": "bis Equilibrium rebalanced -> verbraucht (Tag 11)"
+    },
+    {
+     "von": 81591.31,
+     "bis": 82543.73,
+     "equilibrium": 82067.52,
+     "grund": "bis Equilibrium rebalanced -> verbraucht (Tag 11)"
     }
    ]
   },
   "range_ote_1h": {
-   "leg": "bearish",
-   "von": 81689.73,
+   "leg": "bullish",
+   "von": 79689.49,
    "bis": 82543.73,
-   "spanne": 854.0,
-   "equilibrium": 82116.73,
-   "ote_von": 82219.21,
-   "ote_bis": 82364.39,
-   "golden_pocket": 82291.8,
-   "preis_bei_prozent": 0.7,
-   "preis_in": "discount",
-   "start_et": "2026-10-15 13:00",
-   "extrem_et": "2026-10-15 23:00",
-   "extrem_unbestaetigt": true,
-   "uebersprungene_ranges": []
+   "spanne": 2854.24,
+   "equilibrium": 81116.61,
+   "ote_von": 80288.88,
+   "ote_bis": 80774.1,
+   "golden_pocket": 80531.49,
+   "preis_bei_prozent": 78.7,
+   "preis_in": "premium",
+   "start_et": "2026-10-15 09:00",
+   "extrem_et": "2026-10-15 13:00",
+   "extrem_unbestaetigt": false,
+   "uebersprungene_ranges": [
+    {
+     "von": 81591.31,
+     "bis": 82543.73,
+     "equilibrium": 82067.52,
+     "grund": "bis Equilibrium rebalanced -> verbraucht (Tag 11)"
+    }
+   ]
   },
   "range_ote_4h": {
    "leg": "bearish",
@@ -4482,16 +4532,16 @@
    "ote_von": 84029.65,
    "ote_bis": 85219.69,
    "golden_pocket": 84624.67,
-   "preis_bei_prozent": 28.7,
+   "preis_bei_prozent": 32.1,
    "preis_in": "discount",
    "start_et": "2026-10-06 08:00",
    "extrem_et": "2026-10-15 08:00",
-   "extrem_unbestaetigt": true,
+   "extrem_unbestaetigt": false,
    "uebersprungene_ranges": [
     {
-     "von": 82875.3,
+     "von": 79689.49,
      "bis": 84054.9,
-     "equilibrium": 83465.1,
+     "equilibrium": 81872.2,
      "grund": "bis Equilibrium rebalanced -> verbraucht (Tag 11)"
     },
     {
@@ -4501,27 +4551,9 @@
      "grund": "bis Equilibrium rebalanced -> verbraucht (Tag 11)"
     },
     {
-     "von": 80959.67,
-     "bis": 84070.1,
-     "equilibrium": 82514.89,
-     "grund": "bis Equilibrium rebalanced -> verbraucht (Tag 11)"
-    },
-    {
      "von": 79689.49,
      "bis": 84261.62,
      "equilibrium": 81975.55,
-     "grund": "bis Equilibrium rebalanced -> verbraucht (Tag 11)"
-    },
-    {
-     "von": 82716.81,
-     "bis": 84261.62,
-     "equilibrium": 83489.21,
-     "grund": "bis Equilibrium rebalanced -> verbraucht (Tag 11)"
-    },
-    {
-     "von": 80322.63,
-     "bis": 84261.62,
-     "equilibrium": 82292.12,
      "grund": "bis Equilibrium rebalanced -> verbraucht (Tag 11)"
     }
    ]
@@ -4535,7 +4567,7 @@
    "ote_von": 67498.76,
    "ote_bis": 71780.01,
    "golden_pocket": 69639.39,
-   "preis_bei_prozent": 77.4,
+   "preis_bei_prozent": 78.3,
    "preis_in": "premium",
    "start_et": "2026-08-02 20:00",
    "extrem_et": "2026-09-20 20:00",
@@ -4558,7 +4590,7 @@
    "ote_von": 84216.53,
    "ote_bis": 85457.81,
    "golden_pocket": 84837.17,
-   "preis_bei_prozent": 27.5,
+   "preis_bei_prozent": 30.8,
    "preis_in": "discount",
    "start_et": "2026-10-04 20:00",
    "extrem_et": "2026-10-14 20:00",
@@ -5460,19 +5492,6 @@
    },
    {
     "richtung": "bullish",
-    "von": 83000.0,
-    "bis": 83150.0,
-    "mitte": 83075.0,
-    "et": "2026-10-13 00:00",
-    "unmediated": false,
-    "erster_tap_et": "2026-10-13 06:00",
-    "ifvg": true,
-    "ifvg_et": "2026-10-14 08:00",
-    "ifvg_abstand_pkt": 348.58,
-    "ifvg_knapp": false
-   },
-   {
-    "richtung": "bullish",
     "von": 83469.46,
     "bis": 83479.23,
     "mitte": 83474.35,
@@ -5601,12 +5620,22 @@
     "bis": 81671.25,
     "mitte": 81172.35,
     "et": "2026-10-15 11:00",
-    "unmediated": true,
-    "erster_tap_et": null,
+    "unmediated": false,
+    "erster_tap_et": "2026-10-15 23:00",
     "ifvg": false
    }
   ],
   "fvg_30m": [
+   {
+    "richtung": "bullish",
+    "von": 69781.84,
+    "bis": 71138.99,
+    "mitte": 70460.42,
+    "et": "2026-08-20 04:30",
+    "unmediated": true,
+    "erster_tap_et": null,
+    "ifvg": false
+   },
    {
     "richtung": "bullish",
     "von": 71780.29,
@@ -5709,19 +5738,6 @@
    },
    {
     "richtung": "bearish",
-    "von": 81072.28,
-    "bis": 81273.8,
-    "mitte": 81173.04,
-    "et": "2026-10-15 01:30",
-    "unmediated": false,
-    "erster_tap_et": "2026-10-15 03:00",
-    "ifvg": true,
-    "ifvg_et": "2026-10-15 03:30",
-    "ifvg_abstand_pkt": 158.23,
-    "ifvg_knapp": false
-   },
-   {
-    "richtung": "bearish",
     "von": 80870.93,
     "bis": 81013.04,
     "mitte": 80941.98,
@@ -5788,8 +5804,8 @@
     "bis": 81671.25,
     "mitte": 81468.12,
     "et": "2026-10-15 11:00",
-    "unmediated": true,
-    "erster_tap_et": null,
+    "unmediated": false,
+    "erster_tap_et": "2026-10-15 23:30",
     "ifvg": false
    },
    {
@@ -5878,19 +5894,6 @@
     "bis": 81346.7,
     "mitte": 81296.62,
     "et": "2026-10-15 10:45",
-    "unmediated": true,
-    "erster_tap_et": null,
-    "ifvg": false,
-    "gesponsort": false,
-    "sponsor": null,
-    "leg_start_et": "2026-10-15 09:45"
-   },
-   {
-    "richtung": "bullish",
-    "von": 81517.0,
-    "bis": 81671.25,
-    "mitte": 81594.12,
-    "et": "2026-10-15 11:00",
     "unmediated": true,
     "erster_tap_et": null,
     "ifvg": false,
@@ -6127,51 +6130,6 @@
    },
    {
     "richtung": "bearish",
-    "von": 82275.65,
-    "bis": 82287.04,
-    "mitte": 82281.35,
-    "et": "2026-10-15 20:50",
-    "unmediated": false,
-    "erster_tap_et": "2026-10-15 21:10",
-    "ifvg": true,
-    "ifvg_et": "2026-10-15 21:10",
-    "ifvg_abstand_pkt": 8.96,
-    "ifvg_knapp": false,
-    "gesponsort": false,
-    "sponsor": null,
-    "leg_start_et": "2026-10-15 18:20"
-   },
-   {
-    "richtung": "bullish",
-    "von": 82235.83,
-    "bis": 82259.33,
-    "mitte": 82247.58,
-    "et": "2026-10-15 21:15",
-    "unmediated": false,
-    "erster_tap_et": "2026-10-15 21:20",
-    "ifvg": true,
-    "ifvg_et": "2026-10-15 21:20",
-    "ifvg_abstand_pkt": 80.97,
-    "ifvg_knapp": false,
-    "gesponsort": true,
-    "sponsor": "4h-FVG 81472.39-81870.63",
-    "leg_start_et": "2026-10-15 16:55"
-   },
-   {
-    "richtung": "bearish",
-    "von": 82180.78,
-    "bis": 82259.33,
-    "mitte": 82220.05,
-    "et": "2026-10-15 21:25",
-    "unmediated": false,
-    "erster_tap_et": "2026-10-15 21:30",
-    "ifvg": false,
-    "gesponsort": false,
-    "sponsor": null,
-    "leg_start_et": "2026-10-15 18:20"
-   },
-   {
-    "richtung": "bearish",
     "von": 82053.84,
     "bis": 82058.06,
     "mitte": 82055.95,
@@ -6284,29 +6242,48 @@
    },
    {
     "richtung": "bearish",
-    "von": 82000.45,
-    "bis": 82049.49,
-    "mitte": 82024.97,
-    "et": "2026-10-15 23:25",
-    "unmediated": true,
-    "erster_tap_et": null,
-    "ifvg": false,
+    "von": 81924.46,
+    "bis": 81934.97,
+    "mitte": 81929.71,
+    "et": "2026-10-15 23:30",
+    "unmediated": false,
+    "erster_tap_et": "2026-10-15 23:45",
+    "ifvg": true,
+    "ifvg_et": "2026-10-15 23:45",
+    "ifvg_abstand_pkt": 64.46,
+    "ifvg_knapp": false,
     "gesponsort": false,
     "sponsor": null,
     "leg_start_et": "2026-10-15 18:20"
    },
    {
     "richtung": "bearish",
-    "von": 81924.46,
-    "bis": 81934.97,
-    "mitte": 81929.71,
-    "et": "2026-10-15 23:30",
-    "unmediated": true,
-    "erster_tap_et": null,
-    "ifvg": false,
+    "von": 81816.26,
+    "bis": 81926.71,
+    "mitte": 81871.49,
+    "et": "2026-10-15 23:35",
+    "unmediated": false,
+    "erster_tap_et": "2026-10-15 23:45",
+    "ifvg": true,
+    "ifvg_et": "2026-10-15 23:45",
+    "ifvg_abstand_pkt": 72.72,
+    "ifvg_knapp": false,
     "gesponsort": false,
     "sponsor": null,
     "leg_start_et": "2026-10-15 18:20"
+   },
+   {
+    "richtung": "bullish",
+    "von": 81798.21,
+    "bis": 81995.64,
+    "mitte": 81896.93,
+    "et": "2026-10-15 23:50",
+    "unmediated": false,
+    "erster_tap_et": "2026-10-16 00:00",
+    "ifvg": false,
+    "gesponsort": true,
+    "sponsor": "1h-FVG 80673.44-81671.25",
+    "leg_start_et": "2026-10-15 23:40"
    }
   ],
   "ith_itl": [
@@ -7363,9 +7340,9 @@
   "nwog": null,
   "offene_nwog": [],
   "ndog": [],
-  "vwap": 82185.07,
+  "vwap": 82095.06,
   "market_condition": {
-   "fvgs_letzte_60_bars": 15,
+   "fvgs_letzte_60_bars": 14,
    "bewertung": "gut"
   },
   "data_levels": [
@@ -7436,8 +7413,8 @@
    {
     "termin": "Fed Chairman Warsh Speaks",
     "zeit_et": "2026-10-15 23:30",
-    "data_high": 81924.46,
-    "data_low": 81689.73,
+    "data_high": 82093.5,
+    "data_low": 81591.31,
     "data_high_status": "unberuehrt",
     "data_low_status": "unberuehrt"
    }
@@ -7448,9 +7425,25 @@
     "tag": {
      "beendet": false,
      "start_et": "2026-10-15 20:00",
-     "ende_et": "2026-10-15 23:35",
+     "ende_et": "2026-10-16 00:00",
      "sweeps": [],
      "fvg_taps": [
+      {
+       "zone": "1h-FVG 80673.44-81671.25",
+       "tf": "1h",
+       "von": 80673.44,
+       "bis": 81671.25,
+       "et": "2026-10-15 23:40",
+       "seite": "low"
+      },
+      {
+       "zone": "30m-FVG 81265.0-81671.25",
+       "tf": "30m",
+       "von": 81265.0,
+       "bis": 81671.25,
+       "et": "2026-10-15 23:40",
+       "seite": "low"
+      },
       {
        "zone": "30m-FVG 82132.32-82355.95",
        "tf": "30m",
@@ -7460,7 +7453,7 @@
        "seite": "high"
       }
      ],
-     "richtung": "nach oben",
+     "richtung": "beide",
      "hat_manipuliert": true
     }
    },
@@ -7494,10 +7487,10 @@
  "po3_heute_btc": {
   "open": 82126.35,
   "high": 82426.54,
-  "low": 81689.73,
-  "aktuell": 81695.48,
+  "low": 81591.31,
+  "aktuell": 81937.16,
   "hoch_zeit_et": "2026-10-15 21:15",
-  "tief_zeit_et": "2026-10-15 23:35",
+  "tief_zeit_et": "2026-10-15 23:40",
   "form": "OHLC (bearische Manipulation zuerst nach oben)"
  }
 }
