@@ -1,6 +1,6 @@
 {
- "berechnet_utc": "2026-11-03 14:04:12",
- "datenstand_utc": "2026-11-03 14:03:37",
+ "berechnet_utc": "2026-11-03 14:24:14",
+ "datenstand_utc": "2026-11-03 14:23:39",
  "hinweis": "Sessions nach CME-Zeit, Handelstag 18:00 ET bis 17:00 ET (BTC: 00:00 UTC). Alle Zeitangaben mit Jahr.",
  "operationalisierungen": {
   "swing_spanne": "Ein Swing Point gilt als markant, wenn er das Extrem einer Formation aus 2 Bars links und rechts ist (bei der Fib-Range 3 Bars, weil eine Range groebere Swings braucht als eine Liquiditaets-Reihe; auf Tages- und Wochenkerzen 2). Tag 3 sagt nur 'nur markante Swing Points, der Rest ist Noise' und nennt keine Zahl.",
@@ -119,9 +119,9 @@
   }
  ],
  "nq": {
-  "preis": 28313.75,
-  "letzte_bar_et": "2026-11-03 08:30",
-  "datenende_utc": "2026-11-03 13:53",
+  "preis": 28311.75,
+  "letzte_bar_et": "2026-11-03 09:00",
+  "datenende_utc": "2026-11-03 14:13",
   "handelstag": "2026-11-03",
   "handelstag_hat_kerzen": true,
   "markt_geschlossen": null,
@@ -227,7 +227,7 @@
    "high": 28426.5,
    "low": 28038.25,
    "open": 28192.25,
-   "close": 28313.75
+   "close": 28311.75
   },
   "heute_high_zeit_et": "2026-11-03 08:30",
   "heute_low_zeit_et": "2026-11-03 02:20",
@@ -392,11 +392,12 @@
    "letztes_swing_high": 28275.75,
    "letztes_swing_low": 28038.25,
    "traegt_these": 28275.75,
-   "these_status": "unberuehrt",
+   "these_status": "body_close",
    "cisd_bullish": 28236.25,
    "cisd_bearish": 28103.25,
-   "cisd_bullish_status": "sweep",
+   "cisd_bullish_status": "body_close",
    "cisd_bearish_status": "unberuehrt",
+   "these_bruch_zeit_et": "2026-11-03 08:00",
    "mss": false
   },
   "trend_30m": {
@@ -570,12 +571,19 @@
    "ote_von": 28119.78,
    "ote_bis": 28185.78,
    "golden_pocket": 28152.78,
-   "preis_bei_prozent": 71.0,
+   "preis_bei_prozent": 70.4,
    "preis_in": "premium",
    "start_et": "2026-11-03 02:00",
    "extrem_et": "2026-11-03 08:30",
    "extrem_unbestaetigt": true,
-   "uebersprungene_ranges": []
+   "uebersprungene_ranges": [
+    {
+     "von": 28114.25,
+     "bis": 28275.75,
+     "equilibrium": 28195.0,
+     "grund": "bis Equilibrium rebalanced -> verbraucht (Tag 11)"
+    }
+   ]
   },
   "range_ote_1h": {
    "leg": "bearish",
@@ -586,7 +594,7 @@
    "ote_von": 28567.11,
    "ote_bis": 28712.12,
    "golden_pocket": 28639.61,
-   "preis_bei_prozent": 32.3,
+   "preis_bei_prozent": 32.1,
    "preis_in": "discount",
    "start_et": "2026-11-02 10:00",
    "extrem_et": "2026-11-03 02:00",
@@ -602,7 +610,7 @@
    "ote_von": 28982.97,
    "ote_bis": 29242.01,
    "golden_pocket": 29112.49,
-   "preis_bei_prozent": 18.1,
+   "preis_bei_prozent": 17.9,
    "preis_in": "discount",
    "start_et": "2026-10-30 14:00",
    "extrem_et": "2026-11-03 02:00",
@@ -654,7 +662,7 @@
    "ote_von": 30256.76,
    "ote_bis": 30865.07,
    "golden_pocket": 30560.92,
-   "preis_bei_prozent": 7.7,
+   "preis_bei_prozent": 7.6,
    "preis_in": "discount",
    "start_et": "2026-10-05 18:00",
    "extrem_et": "2026-11-02 18:00",
@@ -1847,19 +1855,6 @@
     "ifvg": false
    },
    {
-    "richtung": "bearish",
-    "von": 28320.5,
-    "bis": 28381.5,
-    "mitte": 28351.0,
-    "et": "2026-10-30 14:30",
-    "unmediated": false,
-    "erster_tap_et": "2026-10-30 15:00",
-    "ifvg": true,
-    "ifvg_et": "2026-10-30 15:00",
-    "ifvg_abstand_pkt": 10.75,
-    "ifvg_knapp": false
-   },
-   {
     "richtung": "bullish",
     "von": 28320.5,
     "bis": 28359.5,
@@ -1989,6 +1984,16 @@
     "ifvg_et": "2026-11-03 06:30",
     "ifvg_abstand_pkt": 30.5,
     "ifvg_knapp": false
+   },
+   {
+    "richtung": "bullish",
+    "von": 28249.75,
+    "bis": 28300.0,
+    "mitte": 28274.88,
+    "et": "2026-11-03 08:30",
+    "unmediated": false,
+    "erster_tap_et": "2026-11-03 09:00",
+    "ifvg": false
    }
   ],
   "fvg_15m": [
@@ -3080,6 +3085,20 @@
     "status": "sweep"
    },
    {
+    "art": "1h ITH",
+    "preis": 28275.75,
+    "aus_fvg": [
+     28167.0,
+     28215.25
+    ],
+    "fvg_breite": 48.25,
+    "tap_et": "2026-11-03 06:00",
+    "extrem_in_tap_kerze": false,
+    "et": "2026-11-03 05:00",
+    "status": "body_close",
+    "bruch_zeit_et": "2026-11-03 08:00"
+   },
+   {
     "art": "30m ITH",
     "preis": 30113.0,
     "aus_fvg": [
@@ -3413,9 +3432,9 @@
     "datum": "2026-11-03"
    }
   ],
-  "vwap": 28224.05,
+  "vwap": 28231.26,
   "market_condition": {
-   "fvgs_letzte_60_bars": 9,
+   "fvgs_letzte_60_bars": 10,
    "bewertung": "gut"
   },
   "data_levels": [
@@ -3561,9 +3580,9 @@
   }
  },
  "es": {
-  "preis": 7584.25,
-  "letzte_bar_et": "2026-11-03 08:30",
-  "datenende_utc": "2026-11-03 13:53",
+  "preis": 7581.0,
+  "letzte_bar_et": "2026-11-03 09:00",
+  "datenende_utc": "2026-11-03 14:13",
   "handelstag": "2026-11-03",
   "handelstag_hat_kerzen": true,
   "markt_geschlossen": null,
@@ -3667,7 +3686,7 @@
    "high": 7604.75,
    "low": 7546.0,
    "open": 7580.25,
-   "close": 7584.25
+   "close": 7581.0
   },
   "heute_high_zeit_et": "2026-11-03 08:30",
   "heute_low_zeit_et": "2026-11-03 02:05",
@@ -3831,12 +3850,14 @@
    "letztes_swing_high": 7577.0,
    "letztes_swing_low": 7546.0,
    "traegt_these": 7577.0,
-   "these_status": "unberuehrt",
+   "these_status": "body_close",
    "cisd_bullish": 7574.0,
    "cisd_bearish": 7556.75,
-   "cisd_bullish_status": "sweep",
+   "cisd_bullish_status": "body_close",
    "cisd_bearish_status": "sweep",
-   "mss": false
+   "these_bruch_zeit_et": "2026-11-03 08:00",
+   "mss": true,
+   "hinweis": "Tag 3: Body Close jenseits des tragenden Swings = Market Structure Shift. 'bearish' beschreibt den Stand VOR dem Shift - ab jetzt HH/HL erwarten. Nicht mehr als intakten Trend schreiben."
   },
   "trend_30m": {
    "richtung": "range",
@@ -3944,13 +3965,6 @@
   "struktur_1h": [
    {
     "art": "BOS",
-    "trend_davor": "bullish",
-    "level": 7766.5,
-    "zeit_et": "2026-10-28 08:00",
-    "bedeutung": "Continuation - Body Close in Trendrichtung (Tag 4)"
-   },
-   {
-    "art": "BOS",
     "trend_davor": "bearish",
     "level": 7732.25,
     "zeit_et": "2026-10-29 13:00",
@@ -3969,6 +3983,13 @@
     "level": 7725.25,
     "zeit_et": "2026-10-29 18:00",
     "bedeutung": "Continuation - Body Close in Trendrichtung (Tag 4)"
+   },
+   {
+    "art": "MSS",
+    "trend_davor": "bearish",
+    "level": 7577.0,
+    "zeit_et": "2026-11-03 08:00",
+    "bedeutung": "Trendwende - Body Close gegen den Trend (Tag 4)"
    }
   ],
   "struktur_30m": [
@@ -4002,20 +4023,33 @@
    }
   ],
   "range_ote": {
-   "leg": "bullish",
+   "leg": "bearish",
    "von": 7546.0,
-   "bis": 7604.75,
-   "spanne": 58.75,
-   "equilibrium": 7575.38,
-   "ote_von": 7558.34,
-   "ote_bis": 7568.32,
-   "golden_pocket": 7563.33,
-   "preis_bei_prozent": 65.1,
-   "preis_in": "premium",
-   "start_et": "2026-11-03 02:00",
-   "extrem_et": "2026-11-03 08:30",
-   "extrem_unbestaetigt": true,
-   "uebersprungene_ranges": []
+   "bis": 7693.75,
+   "spanne": 147.75,
+   "equilibrium": 7619.88,
+   "ote_von": 7637.6,
+   "ote_bis": 7662.72,
+   "golden_pocket": 7650.16,
+   "preis_bei_prozent": 23.7,
+   "preis_in": "discount",
+   "start_et": "2026-11-02 10:00",
+   "extrem_et": "2026-11-03 02:00",
+   "extrem_unbestaetigt": false,
+   "uebersprungene_ranges": [
+    {
+     "von": 7555.25,
+     "bis": 7577.0,
+     "equilibrium": 7566.12,
+     "grund": "bis Equilibrium rebalanced -> verbraucht (Tag 11)"
+    },
+    {
+     "von": 7546.0,
+     "bis": 7604.75,
+     "equilibrium": 7575.38,
+     "grund": "bis Equilibrium rebalanced -> verbraucht (Tag 11)"
+    }
+   ]
   },
   "range_ote_1h": {
    "leg": "bearish",
@@ -4026,7 +4060,7 @@
    "ote_von": 7637.6,
    "ote_bis": 7662.72,
    "golden_pocket": 7650.16,
-   "preis_bei_prozent": 25.9,
+   "preis_bei_prozent": 23.7,
    "preis_in": "discount",
    "start_et": "2026-11-02 10:00",
    "extrem_et": "2026-11-03 02:00",
@@ -4042,7 +4076,7 @@
    "ote_von": 7675.11,
    "ote_bis": 7710.52,
    "golden_pocket": 7692.82,
-   "preis_bei_prozent": 18.4,
+   "preis_bei_prozent": 16.8,
    "preis_in": "discount",
    "start_et": "2026-10-30 14:00",
    "extrem_et": "2026-11-03 02:00",
@@ -4065,7 +4099,7 @@
    "ote_von": 6677.54,
    "ote_bis": 6940.07,
    "golden_pocket": 6808.8,
-   "preis_bei_prozent": 79.7,
+   "preis_bei_prozent": 79.5,
    "preis_in": "premium",
    "start_et": "2026-03-29 18:00",
    "extrem_et": "2026-10-04 18:00",
@@ -4100,7 +4134,7 @@
    "ote_von": 7757.42,
    "ote_bis": 7815.39,
    "golden_pocket": 7786.41,
-   "preis_bei_prozent": 11.2,
+   "preis_bei_prozent": 10.3,
    "preis_in": "discount",
    "start_et": "2026-10-11 18:00",
    "extrem_et": "2026-11-02 18:00",
@@ -5594,22 +5628,6 @@
     "leg_start_et": "2026-11-02 10:25"
    },
    {
-    "richtung": "bearish",
-    "von": 7550.25,
-    "bis": 7555.25,
-    "mitte": 7552.75,
-    "et": "2026-11-03 02:05",
-    "unmediated": false,
-    "erster_tap_et": "2026-11-03 02:20",
-    "ifvg": true,
-    "ifvg_et": "2026-11-03 02:25",
-    "ifvg_abstand_pkt": 0.5,
-    "ifvg_knapp": false,
-    "gesponsort": false,
-    "sponsor": null,
-    "leg_start_et": "2026-11-02 21:10"
-   },
-   {
     "richtung": "bullish",
     "von": 7552.75,
     "bis": 7553.25,
@@ -5746,6 +5764,19 @@
     "gesponsort": false,
     "sponsor": null,
     "leg_start_et": "2026-11-03 03:45"
+   },
+   {
+    "richtung": "bearish",
+    "von": 7579.0,
+    "bis": 7584.0,
+    "mitte": 7581.5,
+    "et": "2026-11-03 09:05",
+    "unmediated": false,
+    "erster_tap_et": "2026-11-03 09:10",
+    "ifvg": false,
+    "gesponsort": true,
+    "sponsor": "4h-FVG 7591.5-7623.5",
+    "leg_start_et": "2026-11-03 08:30"
    }
   ],
   "ith_itl": [
@@ -6834,9 +6865,9 @@
     "datum": "2026-11-03"
    }
   ],
-  "vwap": 7572.89,
+  "vwap": 7573.77,
   "market_condition": {
-   "fvgs_letzte_60_bars": 14,
+   "fvgs_letzte_60_bars": 15,
    "bewertung": "gut"
   },
   "data_levels": [
@@ -7134,7 +7165,7 @@
   "open": 28192.25,
   "high": 28426.5,
   "low": 28038.25,
-  "aktuell": 28313.75,
+  "aktuell": 28311.75,
   "hoch_zeit_et": "2026-11-03 08:30",
   "tief_zeit_et": "2026-11-03 02:20",
   "form": "OLHC (bullische Manipulation zuerst nach unten)"
