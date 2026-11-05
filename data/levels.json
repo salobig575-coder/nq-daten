@@ -1,6 +1,6 @@
 {
- "berechnet_utc": "2026-11-05 13:38:12",
- "datenstand_utc": "2026-11-05 13:37:38",
+ "berechnet_utc": "2026-11-05 14:04:12",
+ "datenstand_utc": "2026-11-05 14:03:38",
  "hinweis": "Sessions nach CME-Zeit, Handelstag 18:00 ET bis 17:00 ET (BTC: 00:00 UTC). Alle Zeitangaben mit Jahr.",
  "operationalisierungen": {
   "swing_spanne": "Ein Swing Point gilt als markant, wenn er das Extrem einer Formation aus 2 Bars links und rechts ist (bei der Fib-Range 3 Bars, weil eine Range groebere Swings braucht als eine Liquiditaets-Reihe; auf Tages- und Wochenkerzen 2). Tag 3 sagt nur 'nur markante Swing Points, der Rest ist Noise' und nennt keine Zahl.",
@@ -119,9 +119,9 @@
   }
  ],
  "nq": {
-  "preis": 28347.25,
-  "letzte_bar_et": "2026-11-05 08:00",
-  "datenende_utc": "2026-11-05 13:27",
+  "preis": 28326.5,
+  "letzte_bar_et": "2026-11-05 08:30",
+  "datenende_utc": "2026-11-05 13:53",
   "handelstag": "2026-11-05",
   "handelstag_hat_kerzen": true,
   "markt_geschlossen": null,
@@ -226,7 +226,7 @@
    "high": 28620.75,
    "low": 28167.75,
    "open": 28619.25,
-   "close": 28347.25
+   "close": 28326.5
   },
   "heute_high_zeit_et": "2026-11-04 18:00",
   "heute_low_zeit_et": "2026-11-05 00:50",
@@ -569,12 +569,19 @@
    "ote_von": 28664.53,
    "ote_bis": 28800.74,
    "golden_pocket": 28732.63,
-   "preis_bei_prozent": 22.4,
+   "preis_bei_prozent": 19.8,
    "preis_in": "discount",
    "start_et": "2026-11-04 10:00",
    "extrem_et": "2026-11-05 00:30",
    "extrem_unbestaetigt": false,
-   "uebersprungene_ranges": []
+   "uebersprungene_ranges": [
+    {
+     "von": 28167.75,
+     "bis": 28465.0,
+     "equilibrium": 28316.38,
+     "grund": "bis Equilibrium rebalanced -> verbraucht (Tag 11)"
+    }
+   ]
   },
   "range_ote_1h": {
    "leg": "bearish",
@@ -585,7 +592,7 @@
    "ote_von": 28664.53,
    "ote_bis": 28800.74,
    "golden_pocket": 28732.63,
-   "preis_bei_prozent": 22.4,
+   "preis_bei_prozent": 19.8,
    "preis_in": "discount",
    "start_et": "2026-11-04 10:00",
    "extrem_et": "2026-11-05 00:00",
@@ -601,7 +608,7 @@
    "ote_von": 29646.72,
    "ote_bis": 30203.59,
    "golden_pocket": 29925.15,
-   "preis_bei_prozent": 22.3,
+   "preis_bei_prozent": 21.7,
    "preis_in": "discount",
    "start_et": "2026-10-13 22:00",
    "extrem_et": "2026-11-03 22:00",
@@ -648,7 +655,7 @@
    "ote_von": 24779.05,
    "ote_bis": 26250.4,
    "golden_pocket": 25514.72,
-   "preis_bei_prozent": 62.2,
+   "preis_bei_prozent": 62.0,
    "preis_in": "premium",
    "start_et": "2026-03-29 18:00",
    "extrem_et": "2026-10-04 18:00",
@@ -677,7 +684,7 @@
    "ote_von": 30096.22,
    "ote_bis": 30776.34,
    "golden_pocket": 30436.28,
-   "preis_bei_prozent": 18.3,
+   "preis_bei_prozent": 17.8,
    "preis_in": "discount",
    "start_et": "2026-10-05 18:00",
    "extrem_et": "2026-11-03 18:00",
@@ -2205,7 +2212,10 @@
     "et": "2026-11-05 07:45",
     "unmediated": false,
     "erster_tap_et": "2026-11-05 08:00",
-    "ifvg": false,
+    "ifvg": true,
+    "ifvg_et": "2026-11-05 08:30",
+    "ifvg_abstand_pkt": 4.25,
+    "ifvg_knapp": false,
     "gesponsort": false,
     "sponsor": null,
     "leg_start_et": "2026-11-04 16:45"
@@ -2472,19 +2482,6 @@
    },
    {
     "richtung": "bearish",
-    "von": 28344.25,
-    "bis": 28365.5,
-    "mitte": 28354.88,
-    "et": "2026-11-05 07:35",
-    "unmediated": false,
-    "erster_tap_et": "2026-11-05 08:00",
-    "ifvg": false,
-    "gesponsort": false,
-    "sponsor": null,
-    "leg_start_et": "2026-11-05 06:50"
-   },
-   {
-    "richtung": "bearish",
     "von": 28335.5,
     "bis": 28337.0,
     "mitte": 28336.25,
@@ -2505,9 +2502,12 @@
     "bis": 28331.0,
     "mitte": 28329.5,
     "et": "2026-11-05 08:20",
-    "unmediated": true,
-    "erster_tap_et": null,
-    "ifvg": false,
+    "unmediated": false,
+    "erster_tap_et": "2026-11-05 08:30",
+    "ifvg": true,
+    "ifvg_et": "2026-11-05 08:30",
+    "ifvg_abstand_pkt": 8.0,
+    "ifvg_knapp": false,
     "gesponsort": false,
     "sponsor": null,
     "leg_start_et": "2026-11-05 04:30"
@@ -3542,9 +3542,9 @@
     "datum": "2026-11-05"
    }
   ],
-  "vwap": 28352.34,
+  "vwap": 28351.44,
   "market_condition": {
-   "fvgs_letzte_60_bars": 13,
+   "fvgs_letzte_60_bars": 14,
    "bewertung": "gut"
   },
   "data_levels": [
@@ -3673,9 +3673,9 @@
   }
  },
  "es": {
-  "preis": 7730.0,
-  "letzte_bar_et": "2026-11-05 08:00",
-  "datenende_utc": "2026-11-05 13:27",
+  "preis": 7727.0,
+  "letzte_bar_et": "2026-11-05 08:30",
+  "datenende_utc": "2026-11-05 13:53",
   "handelstag": "2026-11-05",
   "handelstag_hat_kerzen": true,
   "markt_geschlossen": null,
@@ -3774,7 +3774,7 @@
    "high": 7738.75,
    "low": 7691.0,
    "open": 7732.5,
-   "close": 7730.0
+   "close": 7727.0
   },
   "heute_high_zeit_et": "2026-11-05 07:00",
   "heute_low_zeit_et": "2026-11-05 00:45",
@@ -3946,16 +3946,15 @@
    "mss": false
   },
   "trend_30m": {
-   "richtung": "range",
-   "letztes_swing_high": 7721.25,
+   "richtung": "bullish",
+   "letztes_swing_high": 7738.75,
    "letztes_swing_low": 7709.25,
-   "traegt_these": 7721.25,
-   "these_status": "body_close",
-   "cisd_bullish": 7718.0,
+   "traegt_these": 7709.25,
+   "these_status": "unberuehrt",
+   "cisd_bullish": 7735.75,
    "cisd_bearish": 7711.25,
-   "cisd_bullish_status": "body_close",
+   "cisd_bullish_status": "unberuehrt",
    "cisd_bearish_status": "unberuehrt",
-   "these_bruch_zeit_et": "2026-11-05 04:30",
    "mss": false
   },
   "struktur_1w": [
@@ -4117,7 +4116,7 @@
    "ote_von": 7543.81,
    "ote_bis": 7587.38,
    "golden_pocket": 7565.59,
-   "preis_bei_prozent": 93.7,
+   "preis_bei_prozent": 92.5,
    "preis_in": "premium",
    "start_et": "2026-11-03 22:00",
    "extrem_et": "2026-11-04 13:00",
@@ -4152,7 +4151,7 @@
    "ote_von": 7543.81,
    "ote_bis": 7587.38,
    "golden_pocket": 7565.59,
-   "preis_bei_prozent": 93.7,
+   "preis_bei_prozent": 92.5,
    "preis_in": "premium",
    "start_et": "2026-11-03 22:00",
    "extrem_et": "2026-11-04 13:00",
@@ -4175,7 +4174,7 @@
    "ote_von": 7543.81,
    "ote_bis": 7587.38,
    "golden_pocket": 7565.59,
-   "preis_bei_prozent": 93.7,
+   "preis_bei_prozent": 92.5,
    "preis_in": "premium",
    "start_et": "2026-11-03 22:00",
    "extrem_et": "2026-11-04 10:00",
@@ -4191,7 +4190,7 @@
    "ote_von": 6677.54,
    "ote_bis": 6940.07,
    "golden_pocket": 6808.8,
-   "preis_bei_prozent": 89.2,
+   "preis_bei_prozent": 89.0,
    "preis_in": "premium",
    "start_et": "2026-03-29 18:00",
    "extrem_et": "2026-10-04 18:00",
@@ -4226,7 +4225,7 @@
    "ote_von": 7251.08,
    "ote_bis": 7390.19,
    "golden_pocket": 7320.63,
-   "preis_bei_prozent": 79.5,
+   "preis_bei_prozent": 79.2,
    "preis_in": "premium",
    "start_et": "2026-04-22 18:00",
    "extrem_et": "2026-10-05 18:00",
@@ -5849,7 +5848,10 @@
     "et": "2026-11-05 07:30",
     "unmediated": false,
     "erster_tap_et": "2026-11-05 07:45",
-    "ifvg": false,
+    "ifvg": true,
+    "ifvg_et": "2026-11-05 08:30",
+    "ifvg_abstand_pkt": 1.5,
+    "ifvg_knapp": false,
     "gesponsort": false,
     "sponsor": null,
     "leg_start_et": "2026-11-04 15:30"
@@ -6253,21 +6255,8 @@
     "bis": 7735.25,
     "mitte": 7734.38,
     "et": "2026-11-05 07:20",
-    "unmediated": true,
-    "erster_tap_et": null,
-    "ifvg": false,
-    "gesponsort": false,
-    "sponsor": null,
-    "leg_start_et": "2026-11-05 07:00"
-   },
-   {
-    "richtung": "bearish",
-    "von": 7730.0,
-    "bis": 7733.5,
-    "mitte": 7731.75,
-    "et": "2026-11-05 07:25",
     "unmediated": false,
-    "erster_tap_et": "2026-11-05 08:15",
+    "erster_tap_et": "2026-11-05 08:30",
     "ifvg": false,
     "gesponsort": false,
     "sponsor": null,
@@ -7356,7 +7345,7 @@
     "datum": "2026-11-05"
    }
   ],
-  "vwap": 7716.98,
+  "vwap": 7717.56,
   "market_condition": {
    "fvgs_letzte_60_bars": 16,
    "bewertung": "gut"
@@ -7515,7 +7504,7 @@
   "open": 28619.25,
   "high": 28620.75,
   "low": 28167.75,
-  "aktuell": 28347.25,
+  "aktuell": 28326.5,
   "hoch_zeit_et": "2026-11-04 18:00",
   "tief_zeit_et": "2026-11-05 00:50",
   "form": "OHLC (bearische Manipulation zuerst nach oben)"
